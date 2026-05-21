@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sunguru98/glox/lib"
+	lib "github.com/sunguru98/glox/lib"
 )
 
 type Scanner struct {
@@ -125,7 +125,7 @@ func (s *Scanner) scanToken() {
 	}
 }
 
-func (s *Scanner) ScanTokens() {
+func (s *Scanner) ScanTokens() []Token {
 	for {
 		// If reached end of source break
 		if s.isAtEnd() {
@@ -141,6 +141,8 @@ func (s *Scanner) ScanTokens() {
 	// Since we've reached EOF, need to add EOF token
 	eofToken := NewToken(EOF, "", nil, s.line)
 	s.tokens = append(s.tokens, *eofToken)
+
+	return s.tokens
 }
 
 func (s *Scanner) addToken(tokenType TokenType) {
