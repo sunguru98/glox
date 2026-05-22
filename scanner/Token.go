@@ -1,6 +1,9 @@
 package scanner
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type Token struct {
 	Type       TokenType // Type of Token (Single/Two character/Literals/Keywords)
@@ -18,6 +21,16 @@ func NewToken(tType TokenType, lexeme string, literal any, lineNumber int) *Toke
 	}
 }
 
-func (t *Token) String() string {
-	return fmt.Sprintf("%v %s %v", t.Type, t.Lexeme, t.Literal)
+func (t Token) String() string {
+	var stringBuilder strings.Builder
+	fmt.Fprintf(&stringBuilder, "Token Type: %v\n", t.Type)
+	if t.Type != EOF {
+		fmt.Fprintf(&stringBuilder, "Raw Lexeme: %s\n", t.Lexeme)
+	}
+
+	if t.Type == String || t.Type == Number {
+		fmt.Fprintf(&stringBuilder, "Literal: %v\n", t.Literal)
+	}
+
+	return stringBuilder.String()
 }

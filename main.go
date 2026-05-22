@@ -39,7 +39,6 @@ func RunPrompt() {
 	fmt.Print("> ")
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
-		fmt.Print("> ")
 		text := scanner.Text()
 		if text == "" {
 			break
@@ -47,6 +46,7 @@ func RunPrompt() {
 
 		Run(text)
 		lib.HadError = false
+		fmt.Print("> ")
 	}
 
 	if err := scanner.Err(); err != nil {

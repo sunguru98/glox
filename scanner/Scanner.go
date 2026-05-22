@@ -7,6 +7,25 @@ import (
 	lib "github.com/sunguru98/glox/lib"
 )
 
+var Keywords = map[string]TokenType{
+	"and":    And,
+	"class":  Class,
+	"else":   Else,
+	"false":  False,
+	"for":    For,
+	"fun":    Fun,
+	"if":     If,
+	"nil":    Nil,
+	"or":     Or,
+	"print":  Print,
+	"return": Return,
+	"super":  Super,
+	"this":   This,
+	"true":   True,
+	"var":    Var,
+	"while":  While,
+}
+
 type Scanner struct {
 	source  string  // The raw source code
 	tokens  []Token // The parsed tokens from lexemes
@@ -120,6 +139,12 @@ func (s *Scanner) scanToken() {
 			break
 		}
 
+		// Or if it's an alpha (alphabet/underscore)
+		if s.isAlpha(currentCharacter) {
+			s.matchIdentifider()
+			break
+		}
+
 		// When none of the assumed character combinations match, invoke an error
 		lib.Error(s.line, "Unexpected character.")
 	}
@@ -213,6 +238,14 @@ func (s *Scanner) matchCharAndAdvance(expectedChar byte) bool {
 	return true
 }
 
+func (s *Scanner) isAlpha(charToBeChecked byte) bool {
+	// The character should either be within 'a' to 'z'
+	// Or 'A' - 'Z' or an underscore (since a variable/identifier can have underscores)
+	return (charToBeChecked >= 'a' && charToBeChecked <= 'z') ||
+		(charToBeChecked >= 'A' && charToBeChecked <= 'Z') ||
+		charToBeChecked == '_'
+}
+
 func (s *Scanner) matchString() {
 	for {
 		// The loop advances until the current index is at end of source
@@ -301,4 +334,38 @@ func (s *Scanner) matchDigit() {
 	}
 
 	s.addTokenWithLiteral(Number, value)
+}
+
+func (s *Scanner) isAlphaNumeric(charToBeChecked byte) bool {
+	// To check whether the character is either a number or alphabet or underscore
+	return s.isAlpha(charToBeChecked) || s.isDigit(charToBeChecked)
+}
+
+func (s *Scanner) matchIdentifider() {
+	for {
+		// As long as the current index points to a valid digit/alphabet/underscore
+		// We can consume the characters
+		peekedCharacter := s.peek()
+		// Once it's not the case, then we can break
+		// To get the range of the identifier to capture (start to current)
+		if !s.isAlphaNumeric(peekedCharacter) {
+			break
+		}
+
+		s.consumeCharAndAdvance()
+	}
+
+	// A reserved keyword is also a type of identifier
+	identifierRawStr := s.source[s.start:s.current]
+
+	// We try to check if the consumed range is part of the keyword map
+	// If yes, we create a token under the Keyword TokenType
+	keywordType, ok := Keywords[identifierRawStr]
+	if !ok {
+		// Else it's marked as a normal Identifer
+		keywordType = Identifier
+	}
+
+	// We then create a token and add to the list
+	s.addToken(keywordType)
 }
