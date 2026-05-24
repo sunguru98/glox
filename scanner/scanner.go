@@ -325,8 +325,8 @@ func (s *Scanner) matchDigit() {
 	}
 
 	// Since there are no quotes surrounding a number, we can take start and current as is
-	// The programming language implicitly considers all numbers as f64 for interpreter simplicity
-	// Hence we parse it as an f64 and then create a token and add it to list
+	// The programming language implicitly considers all numbers as float64 for interpreter simplicity
+	// Hence we parse it as an float64 and then create a token and add it to list
 	valueStr := s.source[s.start:s.current]
 	value, err := strconv.ParseFloat(valueStr, 64)
 	if err != nil {

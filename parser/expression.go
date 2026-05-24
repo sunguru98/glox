@@ -2,12 +2,14 @@ package parser
 
 import s "github.com/sunguru98/glox/scanner"
 
-// An expression is either a
+// Operators are arithmetic/Logical symbols which are already defined as 'Token's
+
+// An expression is any of the following
 // 1. Literal (String, Number, Boolean, nil)
 // 2. Unary (single operand)
 // 3. Binary (operands on both sides with operators in the middle)
-// 4. Operators (Arithmetic/Logical symbols)
-// 5. Grouping (Expression inside parantheses)
+// 4. Grouping (Expression inside parantheses)
+
 type Expression interface {
 	// We create an empty function
 	// So that, any struct can be an Expression through implementing this method
