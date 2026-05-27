@@ -60,7 +60,7 @@ func CreateGroupingExpression(expression Expression) *Grouping {
 //----------------------------------------------------------------------------------------------------
 
 // 3. Literal expression is of the grammar
-// NUMBER or STRING or true or false or nil
+// NUMBER / STRING / true / false / nil
 type Literal struct {
 	Value any
 }
