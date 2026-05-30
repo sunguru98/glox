@@ -2,23 +2,31 @@ package parser
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/sunguru98/glox/lib"
 	s "github.com/sunguru98/glox/scanner"
 )
 
 type Parser struct {
-	tokens  []*s.Token // List of tokens scanned
-	current int        // Pointer to next token
+	tokens  []s.Token // List of tokens scanned
+	current int       // Pointer to next token
 }
 
-// ------------------------ INIT FUNCTION -----------------------------
-func InitParser(tokens []*s.Token) *Parser {
+// ------------------------ PRIMARY FUNCTIONS -------------------------
+func InitParser(tokens []s.Token) *Parser {
 	return &Parser{
 		tokens:  tokens,
 		current: 0,
 	}
+}
+
+func (p *Parser) Parse() (Expression, error) {
+	expression, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	return expression, nil
 }
 
 // --------------------------------------------------------------------
@@ -36,7 +44,7 @@ func (p *Parser) checkTokenType(tType s.TokenType) bool {
 	return peekedToken.Type == tType
 }
 
-func (p *Parser) consume(tType s.TokenType, message string) (*s.Token, error) {
+func (p *Parser) consume(tType s.TokenType, message string) (s.Token, error) {
 	isTokenMatching := p.checkTokenType(tType)
 	if isTokenMatching {
 		// If the token we are expecting to consume matches with
@@ -45,10 +53,10 @@ func (p *Parser) consume(tType s.TokenType, message string) (*s.Token, error) {
 	}
 
 	currentToken := p.peek()
-	return nil, p.error(currentToken, message)
+	return s.Token{}, p.error(currentToken, message)
 }
 
-func (p *Parser) consumeTokenAndAdvance() *s.Token {
+func (p *Parser) consumeTokenAndAdvance() s.Token {
 	// Check if the current index is not at the end
 	if !p.isCurrentEOF() {
 		// If not at the end, consume the index by 1
@@ -78,12 +86,12 @@ func (p *Parser) matchTokenAndAdvance(tTypes ...s.TokenType) bool {
 	return false
 }
 
-func (p *Parser) peek() *s.Token {
+func (p *Parser) peek() s.Token {
 	// Fetches the token pointed by current index
 	return p.tokens[p.current]
 }
 
-func (p *Parser) peekPrevious() *s.Token {
+func (p *Parser) peekPrevious() s.Token {
 	// Fetches the token pointed by current index - 1
 	return p.tokens[p.current-1]
 }
@@ -94,7 +102,7 @@ func (p *Parser) isCurrentEOF() bool {
 	return peekedToken.Type == s.EOF
 }
 
-func (p *Parser) error(token *s.Token, message string) error {
+func (p *Parser) error(token s.Token, message string) error {
 	if token.Type == s.EOF {
 		// Error if token is of EOF type (with line number)
 		lib.Report(token.LineNumber, " at end", message)
@@ -104,6 +112,39 @@ func (p *Parser) error(token *s.Token, message string) error {
 	}
 
 	return errors.New("Parser Error")
+}
+
+func (p *Parser) synchronizeFromError() {
+	// When an error is met in any of the parser levels, we try to move on to the next token
+	p.consumeTokenAndAdvance()
+
+	// Once we move past the errored token, there could be two cases
+	// 1. The errored line might be ended (through a semicolon)
+	// 2. Or the error might have happened in mid statement, and another token exists
+	// We check the both cases inside the loop
+
+	for {
+		// Check if we haven't met EOF
+		if p.isCurrentEOF() {
+			return
+		}
+
+		previousPeekedToken := p.peekPrevious()
+		// Check if the token we just consumed is either a semicolon
+		if previousPeekedToken.Type == s.Semicolon {
+			return
+		}
+
+		// Or if the current token is one of the following
+		currentToken := p.peek()
+		switch currentToken.Type {
+		case s.Class, s.Fun, s.Var, s.For, s.If, s.While, s.Print, s.Return:
+			return
+		}
+
+		// We keep iterating till we either see semicolon/EOF/one of the tokens in switch
+		p.consumeTokenAndAdvance()
+	}
 }
 
 // ------------------------------------------------------------------
@@ -342,8 +383,11 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return groupedExpression, nil
 	}
 
-	// Panic if none of the expected primary literals match
-	panic(fmt.Sprintf("Unexpected token: %v", *p.peek()))
+	// We report an error if none of the above tokens match.
+	// This means, we are at the lowest level, and still none matched to form an expression
+	// Hence we report it.
+	currentToken := p.peek()
+	return nil, p.error(currentToken, "Expecting an expression")
 }
 
 //-------------------------------------------------------------------

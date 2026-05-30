@@ -33,11 +33,11 @@ type Binary struct {
 
 func (*Binary) exp() {}
 
-func CreateBinaryExpression(left Expression, operator *s.Token, right Expression) *Binary {
+func CreateBinaryExpression(left Expression, operator s.Token, right Expression) *Binary {
 	return &Binary{
 		Left:     left,
 		Right:    right,
-		Operator: *operator,
+		Operator: operator,
 	}
 }
 
@@ -76,13 +76,13 @@ func CreateLiteralExpression(value any) *Literal {
 // 4. Unary expression is of the grammar
 // ("-" or "!") expression
 type Unary struct {
-	Operator *s.Token
+	Operator s.Token
 	Right    Expression
 }
 
 func (*Unary) exp() {}
 
-func CreateUnaryExpression(operator *s.Token, right Expression) *Unary {
+func CreateUnaryExpression(operator s.Token, right Expression) *Unary {
 	return &Unary{
 		Operator: operator,
 		Right:    right,
