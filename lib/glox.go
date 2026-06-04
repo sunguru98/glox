@@ -5,7 +5,15 @@ import (
 	"os"
 )
 
-var HadError = false
+var (
+	HadError        = false
+	HadRuntimeError = false
+)
+
+func RuntimeError(err error) {
+	fmt.Fprintf(os.Stderr, "%v", err)
+	HadRuntimeError = true
+}
 
 func Error(lineNumber int, message string) {
 	Report(lineNumber, "", message)

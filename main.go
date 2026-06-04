@@ -6,18 +6,30 @@ import (
 	"os"
 
 	"github.com/sunguru98/glox/lib"
-	"github.com/sunguru98/glox/scanner"
+	p "github.com/sunguru98/glox/parser"
+	s "github.com/sunguru98/glox/scanner"
 )
+
+var interpreter = p.InitInterpreter()
 
 func Run(source string) {
 	// Scanner
-	scanner := scanner.InitScanner(source)
+	scanner := s.InitScanner(source)
 	// Tokens
 	tokens := scanner.ScanTokens()
-	// Print each token
-	for _, token := range tokens {
-		fmt.Println(token)
+
+	// Parser
+	parser := p.InitParser(tokens)
+	// Parse Expression
+	expression, _ := parser.Parse()
+
+	// Return if parsing reported an error
+	if lib.HadError {
+		return
 	}
+
+	// Else evaluate the expression
+	interpreter.Interpret(expression)
 }
 
 func RunFile(filePath string) error {
@@ -30,6 +42,10 @@ func RunFile(filePath string) error {
 
 	if lib.HadError {
 		os.Exit(65)
+	}
+
+	if lib.HadRuntimeError {
+		os.Exit(70)
 	}
 
 	return nil
