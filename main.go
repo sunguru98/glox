@@ -10,6 +10,8 @@ import (
 	s "github.com/sunguru98/glox/scanner"
 )
 
+var interpreter = p.InitInterpreter()
+
 func Run(source string) {
 	// Scanner
 	scanner := s.InitScanner(source)
@@ -26,9 +28,8 @@ func Run(source string) {
 		return
 	}
 
-	// Else print the expression
-	printedExpression := p.Print(expression)
-	fmt.Println(printedExpression)
+	// Else evaluate the expression
+	interpreter.Interpret(expression)
 }
 
 func RunFile(filePath string) error {
@@ -41,6 +42,10 @@ func RunFile(filePath string) error {
 
 	if lib.HadError {
 		os.Exit(65)
+	}
+
+	if lib.HadRuntimeError {
+		os.Exit(70)
 	}
 
 	return nil

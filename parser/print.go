@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// A Pretty printer function to showcase the evaluation of an expression
 func Print(expression Expression) string {
 	// We decide on the type of expression node and print accordingly
 	switch exp := expression.(type) {
