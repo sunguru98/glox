@@ -20,13 +20,22 @@ func InitParser(tokens []s.Token) *Parser {
 	}
 }
 
-func (p *Parser) Parse() (Expression, error) {
-	expression, err := p.parseExpression()
-	if err != nil {
-		return nil, err
+func (p *Parser) Parse() ([]Statement, error) {
+	statements := make([]Statement, 0)
+	for {
+		if p.isCurrentEOF() {
+			break
+		}
+
+		statement, err := p.parseStatement()
+		if err != nil {
+			return nil, err
+		}
+
+		statements = append(statements, statement)
 	}
 
-	return expression, nil
+	return statements, nil
 }
 
 // --------------------------------------------------------------------
@@ -145,6 +154,46 @@ func (p *Parser) synchronizeFromError() {
 		// We keep iterating till we either see semicolon/EOF/one of the tokens in switch
 		p.consumeTokenAndAdvance()
 	}
+}
+
+// ------------------------------------------------------------------
+
+// ------------------------ STATEMENTS -----------------------------
+
+func (p *Parser) parsePrintStatement() (Statement, error) {
+	printValue, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.consume(s.Semicolon, "Expecting ; after expression")
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateNewPrintSt(printValue), nil
+}
+
+func (p *Parser) parseExpressionStatement() (Statement, error) {
+	expression, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.consume(s.Semicolon, "Expecting ; after expression")
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateNewExpressionSt(expression), nil
+}
+
+func (p *Parser) parseStatement() (Statement, error) {
+	if p.matchTokenAndAdvance(s.Print) {
+		return p.parsePrintStatement()
+	}
+
+	return p.parseExpressionStatement()
 }
 
 // ------------------------------------------------------------------

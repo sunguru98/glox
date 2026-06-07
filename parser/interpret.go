@@ -13,8 +13,44 @@ import (
 type Interpreter struct {
 }
 
+// ------------------------PRIMARY FUNCTIONS -------------------------
+
 func InitInterpreter() *Interpreter {
 	return &Interpreter{}
+}
+
+func (i *Interpreter) Interpret(statements []Statement) {
+	// We evaluate the expression, and check for errors
+	for _, statement := range statements {
+		err := i.execute(statement)
+		if err != nil {
+			lib.RuntimeError(err)
+		}
+	}
+}
+
+// -------------------------------------------------------------------
+
+// ------------------------ UTILS ------------------------------------
+
+func (i *Interpreter) execute(st Statement) error {
+	switch statement := st.(type) {
+	case *PrintSt:
+		value, err := i.evaluate(statement.Expr)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println(i.stringify(value))
+
+	case *ExpressionSt:
+		_, err := i.evaluate(statement.Expr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (i *Interpreter) isTruthy(object any) bool {
@@ -243,14 +279,4 @@ func (i *Interpreter) stringify(object any) string {
 	return fmt.Sprintf("%v", object)
 }
 
-func (i *Interpreter) Interpret(expression Expression) {
-	// We evaluate the expression, and check for errors
-	value, err := i.evaluate(expression)
-	if err != nil {
-		// If there is one, we report it as a runtime error
-		lib.RuntimeError(err)
-	}
-
-	// Else we print out the evaluated expression's value
-	fmt.Println(i.stringify(value))
-}
+// -----------------------------------------------------------------------------

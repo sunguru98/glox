@@ -10,8 +10,20 @@ type ExpressionSt struct {
 
 func (*ExpressionSt) stmnt() {}
 
+func CreateNewExpressionSt(expression Expression) *ExpressionSt {
+	return &ExpressionSt{
+		Expr: expression,
+	}
+}
+
 type PrintSt struct {
 	Expr Expression
 }
 
 func (*PrintSt) stmnt() {}
+
+func CreateNewPrintSt(expression Expression) *PrintSt {
+	return &PrintSt{
+		Expr: expression,
+	}
+}

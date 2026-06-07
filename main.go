@@ -21,7 +21,7 @@ func Run(source string) {
 	// Parser
 	parser := p.InitParser(tokens)
 	// Parse Expression
-	expression, _ := parser.Parse()
+	statements, _ := parser.Parse()
 
 	// Return if parsing reported an error
 	if lib.HadError {
@@ -29,7 +29,7 @@ func Run(source string) {
 	}
 
 	// Else evaluate the expression
-	interpreter.Interpret(expression)
+	interpreter.Interpret(statements)
 }
 
 func RunFile(filePath string) error {
