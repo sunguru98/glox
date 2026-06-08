@@ -383,7 +383,7 @@ func (p *Parser) parseUnary() (Expression, error) {
 	return p.parsePrimary()
 }
 
-// Primary - Number / String / true / false / nil / grouping expression
+// Primary - Number / String / true / false / nil / grouping expression / IDENTIFIER
 func (p *Parser) parsePrimary() (Expression, error) {
 	// Check if the current index points to a
 	// 1. True token

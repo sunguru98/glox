@@ -33,6 +33,10 @@ func (i *Interpreter) Interpret(statements []Statement) {
 
 // ------------------------ UTILS ------------------------------------
 
+// Execute handles all sorts of
+// 1. Statements
+// 2. Global variables
+
 func (i *Interpreter) execute(st Statement) error {
 	switch statement := st.(type) {
 	case *PrintSt:
