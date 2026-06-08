@@ -23,7 +23,7 @@ type ExpressionSt struct {
 
 func (*ExpressionSt) stmnt() {}
 
-func CreateNewExpressionSt(expression Expression) *ExpressionSt {
+func CreateExpressionSt(expression Expression) *ExpressionSt {
 	return &ExpressionSt{
 		Expr: expression,
 	}
@@ -40,7 +40,7 @@ type PrintSt struct {
 
 func (*PrintSt) stmnt() {}
 
-func CreateNewPrintSt(expression Expression) *PrintSt {
+func CreatePrintSt(expression Expression) *PrintSt {
 	return &PrintSt{
 		Expr: expression,
 	}
@@ -60,7 +60,7 @@ type VariableSt struct {
 
 func (*VariableSt) stmnt() {}
 
-func CreateNewVariableSt(name s.Token, init Expression) *VariableSt {
+func CreateVariableSt(name s.Token, init Expression) *VariableSt {
 	return &VariableSt{
 		Name:        name,
 		Initializer: init,

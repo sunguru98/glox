@@ -20,22 +20,25 @@ func InitParser(tokens []s.Token) *Parser {
 	}
 }
 
-func (p *Parser) Parse() ([]Statement, error) {
+func (p *Parser) Parse() []Statement {
+	// Create a statement array to parse every line
 	statements := make([]Statement, 0)
+
 	for {
+		// The parser evaluates the file/command in REPL
+		// Until EOF is met (a token of EOF)
 		if p.isCurrentEOF() {
 			break
 		}
 
-		statement, err := p.parseStatement()
-		if err != nil {
-			return nil, err
-		}
-
-		statements = append(statements, statement)
+		// We then parse every declaration met
+		declaration := p.parseDeclaration()
+		// And add it to our parsed statements list
+		statements = append(statements, declaration)
 	}
 
-	return statements, nil
+	// Which is then returned
+	return statements
 }
 
 // --------------------------------------------------------------------
@@ -161,44 +164,118 @@ func (p *Parser) synchronizeFromError() {
 // ------------------------ STATEMENTS -----------------------------
 
 func (p *Parser) parsePrintStatement() (Statement, error) {
+	// The current index moves beyond 'print'
+	// Hence we parse the expression
 	printValue, err := p.parseExpression()
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = p.consume(s.Semicolon, "Expecting ; after expression")
+	// We check if the statement ends with ';'
+	_, err = p.consume(s.Semicolon, "Expect ; after expression")
 	if err != nil {
 		return nil, err
 	}
 
-	return CreateNewPrintSt(printValue), nil
+	// If all succeeds, we create a Print statement node
+	return CreatePrintSt(printValue), nil
 }
 
 func (p *Parser) parseExpressionStatement() (Statement, error) {
+	// We parse the expression
 	expression, err := p.parseExpression()
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = p.consume(s.Semicolon, "Expecting ; after expression")
+	// We check if the statement ends with ';'
+	_, err = p.consume(s.Semicolon, "Expect ; after expression")
 	if err != nil {
 		return nil, err
 	}
 
-	return CreateNewExpressionSt(expression), nil
+	// If all succeeds, we create a generic statement node
+	return CreateExpressionSt(expression), nil
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
+	// If the statement starts with the 'print' keyword
+	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
 		return p.parsePrintStatement()
 	}
 
+	// Else it's a generic expression statement
+	// Expression with a semicolon
 	return p.parseExpressionStatement()
 }
 
 // ------------------------------------------------------------------
 
-// ------------------------- PARSERS --------------------------------
+// ------------------------ DECLARATION -----------------------------
+
+func (p *Parser) parseVariableDeclaration() (Statement, error) {
+	// Current index points after the var keyword
+	// Hence we parse the variable name/IDENTIFIER
+	identifierToken, err := p.consume(s.Identifier, "Expect variable name.")
+	if err != nil {
+		return nil, err
+	}
+
+	// We initially assume the variable is uninitialized
+	var initializer Expression = nil
+	// Hence we check if there exists an equal sign
+	if p.matchTokenAndAdvance(s.Equal) {
+		expressionResult, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		// If it exists, that means there exists an initializer
+		// Which equates to the result of the expression
+		initializer = expressionResult
+	}
+
+	// We then consume the semicolon character to finish the var statement
+	_, err = p.consume(s.Semicolon, "Expect ; after variable declaration")
+	if err != nil {
+		return nil, err
+	}
+
+	// Followed by generating a statement node
+	return CreateVariableSt(identifierToken, initializer), nil
+}
+
+func (p *Parser) parseDeclaration() Statement {
+	// We first try checking for a 'var' keyword
+	if p.matchTokenAndAdvance(s.Var) {
+		// If yes, we parse it as a variable statement
+		variableStatement, err := p.parseVariableDeclaration()
+		if err != nil {
+			// If there exists an error, we synchronize
+			// Check p.synchronizeFromError
+			p.synchronizeFromError()
+			return nil
+		}
+
+		// Else we return the evaluated variable statement
+		return variableStatement
+	}
+
+	// Every declaration statement is a subset of a statement
+	// Hence we parse that
+	statement, err := p.parseStatement()
+	if err != nil {
+		p.synchronizeFromError()
+		return nil
+	}
+
+	return statement
+}
+
+// ------------------------------------------------------------------
+
+// ------------------------- EXPRESSION -----------------------------
 // Functions are defined from top to bottom (lowest precedence to highest)
 // Each parsing precedence has it's own grammar
 
@@ -410,7 +487,14 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return CreateLiteralExpression(previousPeekedToken.Literal), nil
 	}
 
-	// 5. A grouping expression "(expression)"
+	// 5. An Identifier
+	if p.matchTokenAndAdvance(s.Identifier) {
+		// Every identifier comes with a variable statement
+		previousPeekedToken := p.peekPrevious()
+		return CreateVariableExpression(previousPeekedToken), nil
+	}
+
+	// 6. A grouping expression "(expression)"
 	// starts with left parentheses
 	if p.matchTokenAndAdvance(s.LeftParen) {
 		// Call the lowest matching expression
@@ -436,7 +520,7 @@ func (p *Parser) parsePrimary() (Expression, error) {
 	// This means, we are at the lowest level, and still none matched to form an expression
 	// Hence we report it.
 	currentToken := p.peek()
-	return nil, p.error(currentToken, "Expecting an expression")
+	return nil, p.error(currentToken, "Expect an expression")
 }
 
 //-------------------------------------------------------------------

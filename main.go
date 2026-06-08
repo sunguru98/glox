@@ -21,7 +21,7 @@ func Run(source string) {
 	// Parser
 	parser := p.InitParser(tokens)
 	// Parse Expression
-	statements, _ := parser.Parse()
+	statements := parser.Parse()
 
 	// Return if parsing reported an error
 	if lib.HadError {
