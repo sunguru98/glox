@@ -11,12 +11,15 @@ import (
 )
 
 type Interpreter struct {
+	Env *Environment
 }
 
 // ------------------------PRIMARY FUNCTIONS -------------------------
 
 func InitInterpreter() *Interpreter {
-	return &Interpreter{}
+	return &Interpreter{
+		Env: InitEnvironment(),
+	}
 }
 
 func (i *Interpreter) Interpret(statements []Statement) {
@@ -40,21 +43,65 @@ func (i *Interpreter) Interpret(statements []Statement) {
 func (i *Interpreter) execute(st Statement) error {
 	switch statement := st.(type) {
 	case *PrintSt:
+		// We evaluate the expression after print keyword
 		value, err := i.evaluate(statement.Expr)
 		if err != nil {
 			return err
 		}
 
+		// And print the result
 		fmt.Println(i.stringify(value))
 
 	case *ExpressionSt:
+		// Here since it's just an expression
+		// No requirement to do anything other than evaluate
 		_, err := i.evaluate(statement.Expr)
 		if err != nil {
 			return err
 		}
+
+	case *VariableSt:
+		var variableValue any = nil
+
+		// If the variable is initialized
+		// We fetch the value
+		if statement.Initializer != nil {
+			value, err := i.evaluate(statement.Initializer)
+			if err != nil {
+				return err
+			}
+
+			variableValue = value
+		}
+
+		// The variableValue is then mapped with
+		// The variable keyword/INITIALIZER
+		i.Env.Define(statement.Name.Lexeme, variableValue)
 	}
 
 	return nil
+}
+
+func (i *Interpreter) stringify(object any) string {
+	// A nil value is simply nil in Lox
+	if object == nil {
+		return "nil"
+	}
+
+	// If the object is of a number
+	if value, ok := object.(float64); ok {
+		// We format it to string without losing the decimal precision
+		text := strconv.FormatFloat(value, 'f', -1, 64)
+		// And strip off the decimals
+		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
+			text = text[0 : len(text)-2]
+		}
+
+		return text
+	}
+
+	// Else, we simply stringify the raw value
+	return fmt.Sprintf("%v", object)
 }
 
 func (i *Interpreter) isTruthy(object any) bool {
@@ -150,6 +197,11 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 		// No other unary operator exists other than above mentioned
 		return nil, nil
+
+	case *Variable:
+		// A variable expression needs the value
+		// That is mapped to the environment
+		return i.Env.Get(exp.Name)
 
 	case *Binary:
 		// In unary we had just the right (since one)
@@ -259,28 +311,6 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 	// No other expression exists other than the above.
 	return nil, nil
-}
-
-func (i *Interpreter) stringify(object any) string {
-	// A nil value is simply nil in Lox
-	if object == nil {
-		return "nil"
-	}
-
-	// If the object is of a number
-	if value, ok := object.(float64); ok {
-		// We format it to string without losing the decimal precision
-		text := strconv.FormatFloat(value, 'f', -1, 64)
-		// And strip off the decimals
-		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
-			text = text[0 : len(text)-2]
-		}
-
-		return text
-	}
-
-	// Else, we simply stringify the raw value
-	return fmt.Sprintf("%v", object)
 }
 
 // -----------------------------------------------------------------------------
