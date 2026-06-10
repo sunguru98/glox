@@ -279,11 +279,51 @@ func (p *Parser) parseDeclaration() Statement {
 // Functions are defined from top to bottom (lowest precedence to highest)
 // Each parsing precedence has it's own grammar
 
-// Expression - equality operand
+// Expression - assignment operand
 // This is the lowest most precedence operand
-// Matching with Equality matches all possible cases
+// Matching with Assignment matches all possible cases
 func (p *Parser) parseExpression() (Expression, error) {
-	return p.parseEquality()
+	return p.parseAssignment()
+}
+
+// Assignment - IDENTIFER = (assignment | equality)
+// Lox bases assignments as expressions and not statements (just like C)
+func (p *Parser) parseAssignment() (Expression, error) {
+	// Fetch the left term expression
+	equalityLeftExpression, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var assignmentExpression Expression = equalityLeftExpression
+
+	// Check if there is an assignment (ie: an equal sign)
+	if p.matchTokenAndAdvance(s.Equal) {
+		equalToken := p.peekPrevious()
+
+		// Fetch the right term expression (value)
+		// Since assignments are right associative, we recursively call assignment()
+		valueExpression, err := p.parseAssignment()
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if the assignment expression is of type Variable
+		// That is, a variable that is already declared/initialized with a value
+		variableExpression, ok := assignmentExpression.(*Variable)
+		if !ok {
+			// If not, then the value cannot be assigned
+			return nil, p.error(equalToken, "Invalid assignment target.")
+		}
+
+		// Else, fetch the variable name and return as an assignment expression
+		// With the new value
+		variableName := variableExpression.Name
+		return CreateAssignmentExpression(variableName, valueExpression), nil
+	}
+
+	return assignmentExpression, nil
 }
 
 // Equality - comparison operand (('!=', '==') comparison operand)

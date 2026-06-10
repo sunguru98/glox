@@ -109,3 +109,21 @@ func CreateVariableExpression(name s.Token) *Variable {
 }
 
 //----------------------------------------------------------------------------------------------------
+
+// 6. Assignment is of the grammar
+// IDENTIFER '=' (assignment | equality)
+type Assignment struct {
+	Name  s.Token
+	Value Expression
+}
+
+func (*Assignment) exp() {}
+
+func CreateAssignmentExpression(name s.Token, value Expression) *Assignment {
+	return &Assignment{
+		Name:  name,
+		Value: value,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------

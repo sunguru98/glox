@@ -27,6 +27,18 @@ func (e *Environment) Get(name s.Token) (any, error) {
 	return value, nil
 }
 
+func (e *Environment) Assign(name s.Token, value any) error {
+	lexeme := name.Lexeme
+	_, ok := e.Map[lexeme]
+
+	if !ok {
+		return fmt.Errorf("Undefined variable %s.", lexeme)
+	}
+
+	e.Map[lexeme] = value
+	return nil
+}
+
 // -----------------------------------------------------------------------------------------------------
 
 func InitEnvironment() *Environment {

@@ -203,6 +203,22 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// That is mapped to the environment
 		return i.Env.Get(exp.Name)
 
+	case *Assignment:
+		// We first evaluate the value expression
+		value, err := i.evaluate(exp.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		// We then (re)assign the above evaluated value
+		// With the variable name
+		err = i.Env.Assign(exp.Name, value)
+		if err != nil {
+			return nil, err
+		}
+
+		return value, nil
+
 	case *Binary:
 		// In unary we had just the right (since one)
 		// Here we just repeat the same twice (two operands)
