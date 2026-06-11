@@ -11,10 +11,122 @@ import (
 )
 
 type Interpreter struct {
+	Env *Environment
 }
 
+// ------------------------PRIMARY FUNCTIONS -------------------------
+
 func InitInterpreter() *Interpreter {
-	return &Interpreter{}
+	return &Interpreter{
+		Env: InitEnvironment(nil),
+	}
+}
+
+func (i *Interpreter) Interpret(statements []Statement) {
+	// We evaluate the expression, and check for errors
+	for _, statement := range statements {
+		err := i.execute(statement)
+		if err != nil {
+			lib.RuntimeError(err)
+		}
+	}
+}
+
+// -------------------------------------------------------------------
+
+// ------------------------ UTILS ------------------------------------
+
+// Execute handles all sorts of
+// 1. Statements
+// 2. Global variables
+
+func (i *Interpreter) execute(st Statement) error {
+
+	switch statement := st.(type) {
+	case *PrintSt:
+		// We evaluate the expression after print keyword
+		value, err := i.evaluate(statement.Expr)
+		if err != nil {
+			return err
+		}
+
+		// And print the result
+		fmt.Println(i.stringify(value))
+
+	case *ExpressionSt:
+		// Here since it's just an expression
+		// No requirement to do anything other than evaluate
+		_, err := i.evaluate(statement.Expr)
+		if err != nil {
+			return err
+		}
+
+	case *VariableSt:
+		var variableValue any = nil
+
+		// If the variable is initialized
+		// We fetch the value
+		if statement.Initializer != nil {
+			value, err := i.evaluate(statement.Initializer)
+			if err != nil {
+				return err
+			}
+
+			variableValue = value
+		}
+
+		// The variableValue is then mapped with
+		// The variable keyword/INITIALIZER
+		i.Env.Define(statement.Name.Lexeme, variableValue)
+
+	case *BlockSt:
+		// A new sub-environment, linking the current env as parent
+		// Is created (i.Env being parent, environment being the block env)
+		environment := InitEnvironment(i.Env)
+
+		// Keeping track of the parent environment
+		previousEnvironment := i.Env
+		// And switching temporarily the parent as the block env
+		i.Env = environment
+
+		// Once the environment is switched to block
+		for _, st := range statement.Statements {
+			// We execute the statements based on that block env
+			err := i.execute(st)
+			if err != nil {
+				// We switch back env if the execution is stopped midway
+				i.Env = previousEnvironment
+				return err
+			}
+		}
+
+		// And then switching back to the parent environment
+		i.Env = previousEnvironment
+	}
+
+	return nil
+}
+
+func (i *Interpreter) stringify(object any) string {
+	// A nil value is simply nil in Lox
+	if object == nil {
+		return "nil"
+	}
+
+	// If the object is of a number
+	if value, ok := object.(float64); ok {
+		// We format it to string without losing the decimal precision
+		text := strconv.FormatFloat(value, 'f', -1, 64)
+		// And strip off the decimals
+		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
+			text = text[0 : len(text)-2]
+		}
+
+		return text
+	}
+
+	// Else, we simply stringify the raw value
+	return fmt.Sprintf("%v", object)
 }
 
 func (i *Interpreter) isTruthy(object any) bool {
@@ -111,7 +223,29 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// No other unary operator exists other than above mentioned
 		return nil, nil
 
+	case *Variable:
+		// A variable expression needs the value
+		// That is mapped to the environment
+		return i.Env.Get(exp.Name)
+
+	case *Assignment:
+		// We first evaluate the value expression
+		value, err := i.evaluate(exp.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		// We then (re)assign the above evaluated value
+		// With the variable name
+		err = i.Env.Assign(exp.Name, value)
+		if err != nil {
+			return nil, err
+		}
+
+		return value, nil
+
 	case *Binary:
+
 		// In unary we had just the right (since one)
 		// Here we just repeat the same twice (two operands)
 		left, err := i.evaluate(exp.Left)
@@ -215,42 +349,11 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 		// Unreachable
 		return nil, nil
+
 	}
 
 	// No other expression exists other than the above.
 	return nil, nil
 }
 
-func (i *Interpreter) stringify(object any) string {
-	// A nil value is simply nil in Lox
-	if object == nil {
-		return "nil"
-	}
-
-	// If the object is of a number
-	if value, ok := object.(float64); ok {
-		// We format it to string without losing the decimal precision
-		text := strconv.FormatFloat(value, 'f', -1, 64)
-		// And strip off the decimals
-		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
-			text = text[0 : len(text)-2]
-		}
-
-		return text
-	}
-
-	// Else, we simply stringify the raw value
-	return fmt.Sprintf("%v", object)
-}
-
-func (i *Interpreter) Interpret(expression Expression) {
-	// We evaluate the expression, and check for errors
-	value, err := i.evaluate(expression)
-	if err != nil {
-		// If there is one, we report it as a runtime error
-		lib.RuntimeError(err)
-	}
-
-	// Else we print out the evaluated expression's value
-	fmt.Println(i.stringify(value))
-}
+// -----------------------------------------------------------------------------

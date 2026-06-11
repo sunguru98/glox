@@ -90,3 +90,40 @@ func CreateUnaryExpression(operator s.Token, right Expression) *Unary {
 }
 
 //----------------------------------------------------------------------------------------------------
+
+//----------------------------------------------------------------------------------------------------
+
+// 5. Variable is of the grammar
+// var IDENTIFER = (expression)? ';'
+type Variable struct {
+	Name  s.Token
+	Right Expression
+}
+
+func (*Variable) exp() {}
+
+func CreateVariableExpression(name s.Token) *Variable {
+	return &Variable{
+		Name: name,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+
+// 6. Assignment is of the grammar
+// IDENTIFER '=' (assignment | equality)
+type Assignment struct {
+	Name  s.Token
+	Value Expression
+}
+
+func (*Assignment) exp() {}
+
+func CreateAssignmentExpression(name s.Token, value Expression) *Assignment {
+	return &Assignment{
+		Name:  name,
+		Value: value,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
