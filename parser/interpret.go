@@ -18,7 +18,7 @@ type Interpreter struct {
 
 func InitInterpreter() *Interpreter {
 	return &Interpreter{
-		Env: InitEnvironment(),
+		Env: InitEnvironment(nil),
 	}
 }
 
@@ -41,6 +41,7 @@ func (i *Interpreter) Interpret(statements []Statement) {
 // 2. Global variables
 
 func (i *Interpreter) execute(st Statement) error {
+
 	switch statement := st.(type) {
 	case *PrintSt:
 		// We evaluate the expression after print keyword
@@ -77,6 +78,30 @@ func (i *Interpreter) execute(st Statement) error {
 		// The variableValue is then mapped with
 		// The variable keyword/INITIALIZER
 		i.Env.Define(statement.Name.Lexeme, variableValue)
+
+	case *BlockSt:
+		// A new sub-environment, linking the current env as parent
+		// Is created (i.Env being parent, environment being the block env)
+		environment := InitEnvironment(i.Env)
+
+		// Keeping track of the parent environment
+		previousEnvironment := i.Env
+		// And switching temporarily the parent as the block env
+		i.Env = environment
+
+		// Once the environment is switched to block
+		for _, st := range statement.Statements {
+			// We execute the statements based on that block env
+			err := i.execute(st)
+			if err != nil {
+				// We switch back env if the execution is stopped midway
+				i.Env = previousEnvironment
+				return err
+			}
+		}
+
+		// And then switching back to the parent environment
+		i.Env = previousEnvironment
 	}
 
 	return nil
@@ -220,6 +245,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		return value, nil
 
 	case *Binary:
+
 		// In unary we had just the right (since one)
 		// Here we just repeat the same twice (two operands)
 		left, err := i.evaluate(exp.Left)
@@ -323,6 +349,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 		// Unreachable
 		return nil, nil
+
 	}
 
 	// No other expression exists other than the above.

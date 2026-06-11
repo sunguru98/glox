@@ -9,7 +9,10 @@ import (
 // ------------------------------------------- ENVIRONMENT ----------------------------------------------
 // The place where variable's values are being stored
 type Environment struct {
-	Map map[string]any
+	// Enclosing environments are the ones
+	// That are outside the current scope
+	Enclosing *Environment
+	Map       map[string]any
 }
 
 func (e *Environment) Define(name string, value any) {
@@ -20,29 +23,47 @@ func (e *Environment) Get(name s.Token) (any, error) {
 	lexeme := name.Lexeme
 	value, ok := e.Map[lexeme]
 
-	if !ok {
-		return nil, fmt.Errorf("Undefined variable %s.", lexeme)
+	if ok {
+		return value, nil
 	}
 
-	return value, nil
+	// If there exists an outer scope/environment pick that
+	if e.Enclosing != nil {
+		return e.Enclosing.Get(name)
+	}
+
+	return nil, fmt.Errorf("Undefined variable %s.", lexeme)
+
 }
 
 func (e *Environment) Assign(name s.Token, value any) error {
 	lexeme := name.Lexeme
 	_, ok := e.Map[lexeme]
 
-	if !ok {
-		return fmt.Errorf("Undefined variable %s.", lexeme)
+	if ok {
+		e.Map[lexeme] = value
+		return nil
 	}
 
-	e.Map[lexeme] = value
-	return nil
+	// If there exists an outer scope/environment pick that
+	if e.Enclosing != nil {
+		// fmt.Println("Assign: Enclosing exists")
+		err := e.Enclosing.Assign(name, value)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	return fmt.Errorf("Undefined variable %s.", lexeme)
 }
 
 // -----------------------------------------------------------------------------------------------------
 
-func InitEnvironment() *Environment {
+func InitEnvironment(enclosing *Environment) *Environment {
 	return &Environment{
-		Map: make(map[string]any),
+		Enclosing: enclosing,
+		Map:       make(map[string]any),
 	}
 }

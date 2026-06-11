@@ -68,3 +68,20 @@ func CreateVariableSt(name s.Token, init Expression) *VariableSt {
 }
 
 // -------------------------------------------------------------------------------------------------------------------------
+
+// A block statement is of grammar
+// '{' declaration '}'
+
+type BlockSt struct {
+	Statements []Statement
+}
+
+func (*BlockSt) stmnt() {}
+
+func CreateBlockSt(statements []Statement) *BlockSt {
+	return &BlockSt{
+		Statements: statements,
+	}
+}
+
+// -------------------------------------------------------------------------------------------------------------------------

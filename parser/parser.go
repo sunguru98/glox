@@ -198,11 +198,48 @@ func (p *Parser) parseExpressionStatement() (Statement, error) {
 	return CreateExpressionSt(expression), nil
 }
 
+func (p *Parser) parseBlockStatement() ([]Statement, error) {
+	// Creating the statements array
+	statements := make([]Statement, 0)
+	for {
+		// Until the Right brace is met '}' or EOF token is met
+		if p.checkTokenType(s.RightBrace) || p.isCurrentEOF() {
+			break
+		}
+
+		// We store declarations that are met inside the block
+		declarationStatement := p.parseDeclaration()
+		statements = append(statements, declarationStatement)
+	}
+
+	// The above loop could have terminated due to EOF without Right brace
+	// Hence we check that
+	_, err := p.consume(s.RightBrace, "Expect '}' after the block")
+	if err != nil {
+		return nil, err
+	}
+
+	// If the loop gracefully ended due to }
+	// We then return the parsed block statements
+	return statements, nil
+}
+
 func (p *Parser) parseStatement() (Statement, error) {
 	// If the statement starts with the 'print' keyword
 	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
 		return p.parsePrintStatement()
+	}
+
+	// If the statement starts with a left brace '{'
+	// It would define a block declaration environment
+	if p.matchTokenAndAdvance(s.LeftBrace) {
+		blockStatements, err := p.parseBlockStatement()
+		if err != nil {
+			return nil, err
+		}
+
+		return CreateBlockSt(blockStatements), nil
 	}
 
 	// Else it's a generic expression statement
