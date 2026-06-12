@@ -163,6 +163,46 @@ func (p *Parser) synchronizeFromError() {
 
 // ------------------------ STATEMENTS -----------------------------
 
+func (p *Parser) parseIfStatement() (Statement, error) {
+	// Check for a left paren token after 'if'
+	_, err := p.consume(s.LeftParen, "Expect ( after if")
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the condition
+	condition, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for a right paren after 'if'
+	_, err = p.consume(s.RightParen, "Expect ) after if condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// We then parse the if block statement
+	thenBlockStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// There can be an optional else block, hence we init with nil
+	var elseBlockStatement Statement = nil
+	if p.matchTokenAndAdvance(s.Else) {
+		statement, err := p.parseStatement()
+		if err != nil {
+			return nil, err
+		}
+		elseBlockStatement = statement
+	}
+
+	// The parsed if statement is then created
+	ifStatement := CreateIfSt(condition, thenBlockStatement, elseBlockStatement)
+	return ifStatement, nil
+}
+
 func (p *Parser) parsePrintStatement() (Statement, error) {
 	// The current index moves beyond 'print'
 	// Hence we parse the expression
@@ -225,6 +265,12 @@ func (p *Parser) parseBlockStatement() ([]Statement, error) {
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
+	// If the statement starts with the 'if' keyword
+	// Consider it as an if statement
+	if p.matchTokenAndAdvance(s.If) {
+		return p.parseIfStatement()
+	}
+
 	// If the statement starts with the 'print' keyword
 	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
@@ -323,11 +369,11 @@ func (p *Parser) parseExpression() (Expression, error) {
 	return p.parseAssignment()
 }
 
-// Assignment - IDENTIFER = (assignment | equality)
+// Assignment - IDENTIFER = (assignment | logic_or)
 // Lox bases assignments as expressions and not statements (just like C)
 func (p *Parser) parseAssignment() (Expression, error) {
 	// Fetch the left term expression
-	equalityLeftExpression, err := p.parseEquality()
+	equalityLeftExpression, err := p.parseLogicOr()
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +407,80 @@ func (p *Parser) parseAssignment() (Expression, error) {
 	}
 
 	return assignmentExpression, nil
+}
+
+// Logic OR (||) - logic_and ('or' logic_and)*
+// ()* means that section can repeat multiple times
+func (p *Parser) parseLogicOr() (Expression, error) {
+	// Fetch the left term expression
+	logicalAndLeft, err := p.parseLogicAnd()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var logicalOrExpression Expression = logicalAndLeft
+
+	for {
+		// Loop through until token type is not || (or)
+		isTokenMatching := p.matchTokenAndAdvance(s.Or)
+		if !isTokenMatching {
+			break
+		}
+
+		// Fetch the specific operator
+		// Previous because matchTokenAndAdvance moves the current index
+		// Hence oldCurrent (the operator token) = newCurrent - 1
+		operator := p.peekPrevious()
+
+		// Fetch the right term expression
+		logicalAndRight, err := p.parseLogicAnd()
+		if err != nil {
+			return nil, err
+		}
+
+		// Re-initialize the new Logical OR expression
+		logicalOrExpression = CreateLogicalExpression(logicalAndLeft, operator, logicalAndRight)
+	}
+
+	return logicalOrExpression, nil
+}
+
+// Logic AND (&&) - equality ('and' equality)*
+// ()* means that section can repeat multiple times
+func (p *Parser) parseLogicAnd() (Expression, error) {
+	// Fetch the left term expression
+	equalityLeft, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var logicalAndExpression Expression = equalityLeft
+
+	for {
+		// Loop through until token type is not && (and)
+		isTokenMatching := p.matchTokenAndAdvance(s.And)
+		if !isTokenMatching {
+			break
+		}
+
+		// Fetch the specific operator
+		// Previous because matchTokenAndAdvance moves the current index
+		// Hence oldCurrent (the operator token) = newCurrent - 1
+		operator := p.peekPrevious()
+
+		// Fetch the right term expression
+		equalityRight, err := p.parseEquality()
+		if err != nil {
+			return nil, err
+		}
+
+		// Re-initialize the new Logical AND expression
+		logicalAndExpression = CreateLogicalExpression(equalityLeft, operator, equalityRight)
+	}
+
+	return logicalAndExpression, nil
 }
 
 // Equality - comparison operand (('!=', '==') comparison operand)

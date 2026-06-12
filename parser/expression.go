@@ -127,3 +127,25 @@ func CreateAssignmentExpression(name s.Token, value Expression) *Assignment {
 }
 
 //----------------------------------------------------------------------------------------------------
+
+// 7. Logical is of the grammar
+// OR - logic_and ("or" logic_and)*
+// AND - equality ("and" equality)*
+
+type Logical struct {
+	Left     Expression
+	Operator s.Token
+	Right    Expression
+}
+
+func (*Logical) exp() {}
+
+func CreateLogicalExpression(left Expression, operator s.Token, right Expression) *Logical {
+	return &Logical{
+		Left:     left,
+		Right:    right,
+		Operator: operator,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
