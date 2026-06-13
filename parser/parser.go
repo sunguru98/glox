@@ -221,6 +221,148 @@ func (p *Parser) parsePrintStatement() (Statement, error) {
 	return CreatePrintSt(printValue), nil
 }
 
+func (p *Parser) parseWhileStatement() (Statement, error) {
+	// Consuming the left paren
+	_, err := p.consume(s.LeftParen, "Expect '(' after 'while'")
+	if err != nil {
+		return nil, err
+	}
+
+	// Consuming the while condition expression
+	condition, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Consuming the right paren
+	_, err = p.consume(s.RightParen, "Expect ')' after 'while' condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// Parsing the block statement
+	blockStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// Creating a new while statement
+	whileStatement := CreateWhileSt(condition, blockStatement)
+	return whileStatement, nil
+}
+
+func (p *Parser) parseForStatement() (Statement, error) {
+	// Consuming the left paren
+	_, err := p.consume(s.LeftParen, "Expect '(' after 'for'")
+	if err != nil {
+		return nil, err
+	}
+
+	// A for loop 'usually' has three steps inside paren
+	// 1. Init variable to a value
+	var initializer Statement
+
+	// If it starts with a semicolon, then there is no initializer
+	if p.matchTokenAndAdvance(s.Semicolon) {
+		initializer = nil
+	}
+
+	// If it starts with a "var" keyword
+	// Then the initializer is a variable declaration
+	if p.matchTokenAndAdvance(s.Var) {
+		initializer, err = p.parseVariableDeclaration()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Else it's a regular expression
+		// Meaning the variable declaration could be outside the loop
+		// and just the initialization happens here
+		initializer, err = p.parseExpressionStatement()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 2. Checking for a condition
+	var condition Expression = nil
+	// If there is a semicolon immediately after 1.
+	// Then the condition expression is skipped
+	// If not, we parse the condition
+	if !p.checkTokenType(s.Semicolon) {
+		condition, err = p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// And then later, we consume the semicolon
+	_, err = p.consume(s.Semicolon, "Expect ';' after loop condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Post condition updates to the variable
+	var postConditionExpression Expression = nil
+	// If there is a right paren immediately after 2.
+	// Then the increment expression is skipped
+	// If not, we parse the incrementing expression
+	if !p.checkTokenType(s.RightParen) {
+		postConditionExpression, err = p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// And then later, we consume the right paren
+	_, err = p.consume(s.RightParen, "Expect ')' after for clauses")
+	if err != nil {
+		return nil, err
+	}
+
+	// We now have individually parsed
+	// 1. Initializer expression
+	// 2. Condition expression
+	// 3. Post condition expression
+	// The for loop is simply a disguised while loop
+	forStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// Usually a while loop's condition variable
+	// Would be changed at the end of the iteration
+	// Hence we consider the same here, if the
+	// post condition expression is present
+	if postConditionExpression != nil {
+		// We make the already existing block statements execute first
+		// Followed by the post condition expression statement
+		statementsToExecute := []Statement{forStatement, CreateExpressionSt(postConditionExpression)}
+		// And bundled together
+		forStatement = CreateBlockSt(statementsToExecute)
+	}
+
+	// If the condition expression doesn't exist
+	// That simply means a 'while(true)' a.k.a infinite loop
+	if condition == nil {
+		// We fill the condition value to be looping forever instead
+		condition = CreateLiteralExpression(true)
+	}
+
+	// We have the bare minimum requirement for while (condition/body block)
+	forStatement = CreateWhileSt(condition, forStatement)
+
+	// Finally, if the initializer expression exists
+	// That expression statement runs first before the above bundled forStatement
+	if initializer != nil {
+		// Hence we bundle again as a block, with the initializer expression occurring first
+		statementsToExecute := []Statement{initializer, forStatement}
+		forStatement = CreateBlockSt(statementsToExecute)
+	}
+
+	return forStatement, nil
+}
+
 func (p *Parser) parseExpressionStatement() (Statement, error) {
 	// We parse the expression
 	expression, err := p.parseExpression()
@@ -275,6 +417,18 @@ func (p *Parser) parseStatement() (Statement, error) {
 	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
 		return p.parsePrintStatement()
+	}
+
+	// If the statement starts with the 'while' keyword
+	// Consider it as a while statement
+	if p.matchTokenAndAdvance(s.While) {
+		return p.parseWhileStatement()
+	}
+
+	// If the statement starts with the 'for' keyword
+	// Consider it as a for statement
+	if p.matchTokenAndAdvance(s.For) {
+		return p.parseForStatement()
 	}
 
 	// If the statement starts with a left brace '{'

@@ -9,6 +9,7 @@ import s "github.com/sunguru98/glox/scanner"
 // 3. Variable statement
 // 4. Block statements
 // 5. Conditional if statement
+// 6. While/For statement
 type Statement interface {
 	stmnt()
 }
@@ -105,6 +106,30 @@ func CreateIfSt(condition Expression, thenB, elseB Statement) *IfSt {
 		Condition:  condition,
 		ThenBranch: thenB,
 		ElseBranch: elseB,
+	}
+}
+
+// -------------------------------------------------------------------------------------------------------------------------
+
+// A while statement is of grammar
+// 'while' '(' expression ')' statement
+
+// Since a for loop is just syntactic sugar for while
+// Its grammar alone changes
+// 'for' '(' (variableDeclaration | expression | ';') expression?';' expression? ')'
+// statement;
+
+type WhileSt struct {
+	Condition Expression
+	Body      Statement
+}
+
+func (*WhileSt) stmnt() {}
+
+func CreateWhileSt(condition Expression, body Statement) *WhileSt {
+	return &WhileSt{
+		Condition: condition,
+		Body:      body,
 	}
 }
 

@@ -48,7 +48,7 @@ func (i *Interpreter) isTruthy(object any) bool {
 		return value
 	}
 
-	// Else, anything apart from above two is true.
+	// Else, anything apart (empty string, 0, etc) from above two is true.
 	return true
 }
 
@@ -155,8 +155,24 @@ func (i *Interpreter) execute(st Statement) error {
 			return i.execute(statement.ElseBranch)
 		}
 
-		// Else, no condition satisfies, hence we exit
-		return nil
+	case *WhileSt:
+		// Since a while statement is a loop, we loop
+		// till the condition is no more truthy
+		for {
+			// Evaluating the statement condition
+			statementCondition, err := i.evaluate(statement.Condition)
+			if err != nil {
+				return err
+			}
+
+			// Break if not truthy
+			if !i.isTruthy(statementCondition) {
+				break
+			}
+
+			// If not we execute the statements inside the block
+			i.execute(statement.Body)
+		}
 
 	case *VariableSt:
 		var variableValue any = nil
