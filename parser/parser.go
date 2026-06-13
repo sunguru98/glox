@@ -163,6 +163,46 @@ func (p *Parser) synchronizeFromError() {
 
 // ------------------------ STATEMENTS -----------------------------
 
+func (p *Parser) parseIfStatement() (Statement, error) {
+	// Check for a left paren token after 'if'
+	_, err := p.consume(s.LeftParen, "Expect ( after if")
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the condition
+	condition, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Check for a right paren after 'if'
+	_, err = p.consume(s.RightParen, "Expect ) after if condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// We then parse the if block statement
+	thenBlockStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// There can be an optional else block, hence we init with nil
+	var elseBlockStatement Statement = nil
+	if p.matchTokenAndAdvance(s.Else) {
+		statement, err := p.parseStatement()
+		if err != nil {
+			return nil, err
+		}
+		elseBlockStatement = statement
+	}
+
+	// The parsed if statement is then created
+	ifStatement := CreateIfSt(condition, thenBlockStatement, elseBlockStatement)
+	return ifStatement, nil
+}
+
 func (p *Parser) parsePrintStatement() (Statement, error) {
 	// The current index moves beyond 'print'
 	// Hence we parse the expression
@@ -179,6 +219,148 @@ func (p *Parser) parsePrintStatement() (Statement, error) {
 
 	// If all succeeds, we create a Print statement node
 	return CreatePrintSt(printValue), nil
+}
+
+func (p *Parser) parseWhileStatement() (Statement, error) {
+	// Consuming the left paren
+	_, err := p.consume(s.LeftParen, "Expect '(' after 'while'")
+	if err != nil {
+		return nil, err
+	}
+
+	// Consuming the while condition expression
+	condition, err := p.parseExpression()
+	if err != nil {
+		return nil, err
+	}
+
+	// Consuming the right paren
+	_, err = p.consume(s.RightParen, "Expect ')' after 'while' condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// Parsing the block statement
+	blockStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// Creating a new while statement
+	whileStatement := CreateWhileSt(condition, blockStatement)
+	return whileStatement, nil
+}
+
+func (p *Parser) parseForStatement() (Statement, error) {
+	// Consuming the left paren
+	_, err := p.consume(s.LeftParen, "Expect '(' after 'for'")
+	if err != nil {
+		return nil, err
+	}
+
+	// A for loop 'usually' has three steps inside paren
+	// 1. Init variable to a value
+	var initializer Statement
+
+	// If it starts with a semicolon, then there is no initializer
+	if p.matchTokenAndAdvance(s.Semicolon) {
+		initializer = nil
+	}
+
+	// If it starts with a "var" keyword
+	// Then the initializer is a variable declaration
+	if p.matchTokenAndAdvance(s.Var) {
+		initializer, err = p.parseVariableDeclaration()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Else it's a regular expression
+		// Meaning the variable declaration could be outside the loop
+		// and just the initialization happens here
+		initializer, err = p.parseExpressionStatement()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 2. Checking for a condition
+	var condition Expression = nil
+	// If there is a semicolon immediately after 1.
+	// Then the condition expression is skipped
+	// If not, we parse the condition
+	if !p.checkTokenType(s.Semicolon) {
+		condition, err = p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// And then later, we consume the semicolon
+	_, err = p.consume(s.Semicolon, "Expect ';' after loop condition")
+	if err != nil {
+		return nil, err
+	}
+
+	// 3. Post condition updates to the variable
+	var postConditionExpression Expression = nil
+	// If there is a right paren immediately after 2.
+	// Then the increment expression is skipped
+	// If not, we parse the incrementing expression
+	if !p.checkTokenType(s.RightParen) {
+		postConditionExpression, err = p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// And then later, we consume the right paren
+	_, err = p.consume(s.RightParen, "Expect ')' after for clauses")
+	if err != nil {
+		return nil, err
+	}
+
+	// We now have individually parsed
+	// 1. Initializer expression
+	// 2. Condition expression
+	// 3. Post condition expression
+	// The for loop is simply a disguised while loop
+	forStatement, err := p.parseStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// Usually a while loop's condition variable
+	// Would be changed at the end of the iteration
+	// Hence we consider the same here, if the
+	// post condition expression is present
+	if postConditionExpression != nil {
+		// We make the already existing block statements execute first
+		// Followed by the post condition expression statement
+		statementsToExecute := []Statement{forStatement, CreateExpressionSt(postConditionExpression)}
+		// And bundled together
+		forStatement = CreateBlockSt(statementsToExecute)
+	}
+
+	// If the condition expression doesn't exist
+	// That simply means a 'while(true)' a.k.a infinite loop
+	if condition == nil {
+		// We fill the condition value to be looping forever instead
+		condition = CreateLiteralExpression(true)
+	}
+
+	// We have the bare minimum requirement for while (condition/body block)
+	forStatement = CreateWhileSt(condition, forStatement)
+
+	// Finally, if the initializer expression exists
+	// That expression statement runs first before the above bundled forStatement
+	if initializer != nil {
+		// Hence we bundle again as a block, with the initializer expression occurring first
+		statementsToExecute := []Statement{initializer, forStatement}
+		forStatement = CreateBlockSt(statementsToExecute)
+	}
+
+	return forStatement, nil
 }
 
 func (p *Parser) parseExpressionStatement() (Statement, error) {
@@ -225,10 +407,28 @@ func (p *Parser) parseBlockStatement() ([]Statement, error) {
 }
 
 func (p *Parser) parseStatement() (Statement, error) {
+	// If the statement starts with the 'if' keyword
+	// Consider it as an if statement
+	if p.matchTokenAndAdvance(s.If) {
+		return p.parseIfStatement()
+	}
+
 	// If the statement starts with the 'print' keyword
 	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
 		return p.parsePrintStatement()
+	}
+
+	// If the statement starts with the 'while' keyword
+	// Consider it as a while statement
+	if p.matchTokenAndAdvance(s.While) {
+		return p.parseWhileStatement()
+	}
+
+	// If the statement starts with the 'for' keyword
+	// Consider it as a for statement
+	if p.matchTokenAndAdvance(s.For) {
+		return p.parseForStatement()
 	}
 
 	// If the statement starts with a left brace '{'
@@ -323,11 +523,11 @@ func (p *Parser) parseExpression() (Expression, error) {
 	return p.parseAssignment()
 }
 
-// Assignment - IDENTIFER = (assignment | equality)
+// Assignment - IDENTIFER = (assignment | logic_or)
 // Lox bases assignments as expressions and not statements (just like C)
 func (p *Parser) parseAssignment() (Expression, error) {
 	// Fetch the left term expression
-	equalityLeftExpression, err := p.parseEquality()
+	equalityLeftExpression, err := p.parseLogicOr()
 	if err != nil {
 		return nil, err
 	}
@@ -361,6 +561,80 @@ func (p *Parser) parseAssignment() (Expression, error) {
 	}
 
 	return assignmentExpression, nil
+}
+
+// Logic OR (||) - logic_and ('or' logic_and)*
+// ()* means that section can repeat multiple times
+func (p *Parser) parseLogicOr() (Expression, error) {
+	// Fetch the left term expression
+	logicalAndLeft, err := p.parseLogicAnd()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var logicalOrExpression Expression = logicalAndLeft
+
+	for {
+		// Loop through until token type is not || (or)
+		isTokenMatching := p.matchTokenAndAdvance(s.Or)
+		if !isTokenMatching {
+			break
+		}
+
+		// Fetch the specific operator
+		// Previous because matchTokenAndAdvance moves the current index
+		// Hence oldCurrent (the operator token) = newCurrent - 1
+		operator := p.peekPrevious()
+
+		// Fetch the right term expression
+		logicalAndRight, err := p.parseLogicAnd()
+		if err != nil {
+			return nil, err
+		}
+
+		// Re-initialize the new Logical OR expression
+		logicalOrExpression = CreateLogicalExpression(logicalAndLeft, operator, logicalAndRight)
+	}
+
+	return logicalOrExpression, nil
+}
+
+// Logic AND (&&) - equality ('and' equality)*
+// ()* means that section can repeat multiple times
+func (p *Parser) parseLogicAnd() (Expression, error) {
+	// Fetch the left term expression
+	equalityLeft, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var logicalAndExpression Expression = equalityLeft
+
+	for {
+		// Loop through until token type is not && (and)
+		isTokenMatching := p.matchTokenAndAdvance(s.And)
+		if !isTokenMatching {
+			break
+		}
+
+		// Fetch the specific operator
+		// Previous because matchTokenAndAdvance moves the current index
+		// Hence oldCurrent (the operator token) = newCurrent - 1
+		operator := p.peekPrevious()
+
+		// Fetch the right term expression
+		equalityRight, err := p.parseEquality()
+		if err != nil {
+			return nil, err
+		}
+
+		// Re-initialize the new Logical AND expression
+		logicalAndExpression = CreateLogicalExpression(equalityLeft, operator, equalityRight)
+	}
+
+	return logicalAndExpression, nil
 }
 
 // Equality - comparison operand (('!=', '==') comparison operand)
