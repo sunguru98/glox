@@ -1,4 +1,4 @@
-package parser
+package interpreter
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sunguru98/glox/lib"
+	p "github.com/sunguru98/glox/parser"
 	s "github.com/sunguru98/glox/scanner"
 )
 
@@ -22,7 +23,7 @@ func InitInterpreter() *Interpreter {
 	}
 }
 
-func (i *Interpreter) Interpret(statements []Statement) {
+func (i *Interpreter) Interpret(statements []p.Statement) {
 	// We evaluate the expression, and check for errors
 	for _, statement := range statements {
 		err := i.execute(statement)
@@ -116,10 +117,10 @@ func (i *Interpreter) stringify(object any) string {
 // 1. Statements (Print, Expression, If, Block)
 // 2. Variables
 
-func (i *Interpreter) execute(st Statement) error {
+func (i *Interpreter) execute(st p.Statement) error {
 
 	switch statement := st.(type) {
-	case *PrintSt:
+	case *p.PrintSt:
 		// We evaluate the expression after print keyword
 		value, err := i.evaluate(statement.Expr)
 		if err != nil {
@@ -129,7 +130,7 @@ func (i *Interpreter) execute(st Statement) error {
 		// And print the result
 		fmt.Println(i.stringify(value))
 
-	case *ExpressionSt:
+	case *p.ExpressionSt:
 		// Here since it's just an expression
 		// No requirement to do anything other than evaluate
 		_, err := i.evaluate(statement.Expr)
@@ -137,7 +138,7 @@ func (i *Interpreter) execute(st Statement) error {
 			return err
 		}
 
-	case *IfSt:
+	case *p.IfSt:
 		// We check if the "if" conditional expression is truthy
 		condition, err := i.evaluate(statement.Condition)
 		if err != nil {
@@ -155,7 +156,7 @@ func (i *Interpreter) execute(st Statement) error {
 			return i.execute(statement.ElseBranch)
 		}
 
-	case *WhileSt:
+	case *p.WhileSt:
 		// Since a while statement is a loop, we loop
 		// till the condition is no more truthy
 		for {
@@ -174,7 +175,7 @@ func (i *Interpreter) execute(st Statement) error {
 			i.execute(statement.Body)
 		}
 
-	case *VariableSt:
+	case *p.VariableSt:
 		var variableValue any = nil
 
 		// If the variable is initialized
@@ -192,7 +193,7 @@ func (i *Interpreter) execute(st Statement) error {
 		// The variable keyword/INITIALIZER
 		i.Env.Define(statement.Name.Lexeme, variableValue)
 
-	case *BlockSt:
+	case *p.BlockSt:
 		// A new sub-environment, linking the current env as parent
 		// Is created (i.Env being parent, environment being the block env)
 		environment := InitEnvironment(i.Env)
@@ -229,14 +230,14 @@ func (i *Interpreter) execute(st Statement) error {
 // 6. Assignment
 // 7. Logical (|| and &&)
 
-func (i *Interpreter) evaluate(expression Expression) (any, error) {
+func (i *Interpreter) evaluate(expression p.Expression) (any, error) {
 	switch exp := expression.(type) {
-	case *Literal:
+	case *p.Literal:
 		// A literal has already it's value present inside
 		// Hence we can return just that.
 		return exp.Value, nil
 
-	case *Logical:
+	case *p.Logical:
 		// Similar to Binary, we evaluate the left expression
 		left, err := i.evaluate(exp.Left)
 		if err != nil {
@@ -258,13 +259,13 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// Else, we evaluate the right expression
 		return i.evaluate(exp.Right)
 
-	case *Grouping:
+	case *p.Grouping:
 		// A parantheses can have multiple sub expressions inside
 		// Hence we recurse the same function over and over
 		// Till we evaluate all of it inside the paran
 		return i.evaluate(exp.Expression)
 
-	case *Unary:
+	case *p.Unary:
 		// Same goes with Unary.
 		// Evaluate the expression first
 		right, err := i.evaluate(exp.Right)
@@ -288,15 +289,12 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 		}
 
-		// No other unary operator exists other than above mentioned
-		return nil, nil
-
-	case *Variable:
+	case *p.Variable:
 		// A variable expression needs the value
 		// That is mapped to the environment
 		return i.Env.Get(exp.Name)
 
-	case *Assignment:
+	case *p.Assignment:
 		// We first evaluate the value expression
 		value, err := i.evaluate(exp.Value)
 		if err != nil {
@@ -312,8 +310,27 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 		return value, nil
 
-	case *Binary:
+	case *p.Call:
+		// Evaluating the expression before parentheses
+		callee, err := i.evaluate(exp.Callee)
+		if err != nil {
+			return nil, err
+		}
 
+		arguments := make([]any, 0)
+		for _, argument := range exp.Arguments {
+			evaluatedArg, err := i.evaluate(argument)
+			if err != nil {
+				return nil, err
+			}
+
+			arguments = append(arguments, evaluatedArg)
+		}
+
+		function, _ := callee.(Callable)
+		function.call(i, arguments)
+
+	case *p.Binary:
 		// In unary we had just the right (since one)
 		// Here we just repeat the same twice (two operands)
 		left, err := i.evaluate(exp.Left)
@@ -414,9 +431,6 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		case s.EqualEqual:
 			return i.isEqual(left, right), nil
 		}
-
-		// Unreachable
-		return nil, nil
 
 	}
 

@@ -149,3 +149,25 @@ func CreateLogicalExpression(left Expression, operator s.Token, right Expression
 }
 
 //----------------------------------------------------------------------------------------------------
+
+// 8. Call is of the grammar
+// primary '('arguments?')'*
+// A zero argument call can have the arguments optional
+
+type Call struct {
+	Paren     s.Token // Closing paren token needed for line number reporting
+	Callee    Expression
+	Arguments []Expression
+}
+
+func (*Call) exp() {}
+
+func CreateCallExpression(callee Expression, paren s.Token, arguments []Expression) *Call {
+	return &Call{
+		Callee:    callee,
+		Paren:     paren,
+		Arguments: arguments,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------

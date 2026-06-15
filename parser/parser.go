@@ -807,8 +807,73 @@ func (p *Parser) parseUnary() (Expression, error) {
 		return unaryExpression, nil
 	}
 
-	// Else it's probably one the primary expressions mentioned below
-	return p.parsePrimary()
+	// Else, we bump it up to the next precedent operation (call)
+	return p.parseCall()
+}
+
+// Call - Primary expression ( '(' arguments? ')')*
+func (p *Parser) parseCall() (Expression, error) {
+	// Parse the expression before parentheses
+	primaryLeft, err := p.parsePrimary()
+	if err != nil {
+		return nil, err
+	}
+
+	// The expression to return
+	var callExpression Expression = primaryLeft
+
+	for {
+		// If there exists no parentheses (no arguments), we exit
+		// This check makes sure we stop after a chain of function calls
+		// ex: func1()()()
+		// Assuming func1 returns a function which also returns a function
+		if !p.matchTokenAndAdvance(s.LeftParen) {
+			break
+		}
+
+		// For each pair of parentheses, we create an argument expression list
+		arguments := make([]Expression, 0)
+
+		// If the right paren immediately doesn't exist
+		// That means, there are arguments inside the parentheses
+		if !p.checkTokenType(s.RightParen) {
+			for {
+				// Check if the arguments exceeds the
+				// Size limit of 254
+				// We allocate 1 for the 'this' keyword for instance methods
+				if len(arguments) > 254 {
+					extraArgument := p.peek()
+					return nil, p.error(extraArgument, "Cannot have more than 255 arguments")
+				}
+
+				// We parse every argument type
+				argumentExpression, err := p.parseExpression()
+				if err != nil {
+					return nil, err
+				}
+
+				// And add it to our list
+				arguments = append(arguments, argumentExpression)
+
+				// And we iterate the loop, until there are no more arguments
+				// In other words, the ',' operator doesn't exist anymore
+				if !p.matchTokenAndAdvance(s.Comma) {
+					break
+				}
+			}
+		}
+
+		// We then finally consume the corresponding closing paren of the function call
+		closingParen, err := p.consume(s.RightParen, "Expect ) after argument list")
+		if err != nil {
+			return nil, err
+		}
+
+		// And construct it entirely as a "call" expression Node
+		callExpression = CreateCallExpression(callExpression, closingParen, arguments)
+	}
+
+	return callExpression, nil
 }
 
 // Primary - Number / String / true / false / nil / grouping expression / IDENTIFIER

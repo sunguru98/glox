@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sunguru98/glox/lib"
+	i "github.com/sunguru98/glox/interpreter"
+	l "github.com/sunguru98/glox/lib"
 	p "github.com/sunguru98/glox/parser"
 	s "github.com/sunguru98/glox/scanner"
 )
 
-var interpreter = p.InitInterpreter()
+var interpreter = i.InitInterpreter()
 
 func Run(source string) {
 	// Scanner
@@ -24,7 +25,7 @@ func Run(source string) {
 	statements := parser.Parse()
 
 	// Return if parsing reported an error
-	if lib.HadError {
+	if l.HadError {
 		return
 	}
 
@@ -40,11 +41,11 @@ func RunFile(filePath string) error {
 
 	Run(string(bytes))
 
-	if lib.HadError {
+	if l.HadError {
 		os.Exit(65)
 	}
 
-	if lib.HadRuntimeError {
+	if l.HadRuntimeError {
 		os.Exit(70)
 	}
 
@@ -61,7 +62,7 @@ func RunPrompt() {
 		}
 
 		Run(text)
-		lib.HadError = false
+		l.HadError = false
 		fmt.Print("> ")
 	}
 
