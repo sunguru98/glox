@@ -10,6 +10,7 @@ import s "github.com/sunguru98/glox/scanner"
 // 4. Block statements
 // 5. Conditional if statement
 // 6. While/For statement
+
 type Statement interface {
 	stmnt()
 }
@@ -130,6 +131,25 @@ func CreateWhileSt(condition Expression, body Statement) *WhileSt {
 	return &WhileSt{
 		Condition: condition,
 		Body:      body,
+	}
+}
+
+// -------------------------------------------------------------------------------------------------------------------------
+
+// A function statement is of grammar
+// fun IDENTIFIER '('IDENTIFIER,(IDENTIFIER)*')'? block
+type FunctionSt struct {
+	Name   s.Token
+	Params []s.Token
+	Body   []Statement
+}
+
+func (*FunctionSt) stmnt() {}
+
+func CreateFunctionSt(name s.Token, params []s.Token, body []Statement) *FunctionSt {
+	return &FunctionSt{
+		Name:   name,
+		Params: params,
 	}
 }
 

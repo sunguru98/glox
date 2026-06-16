@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/sunguru98/glox/lib"
 	s "github.com/sunguru98/glox/scanner"
@@ -451,6 +452,55 @@ func (p *Parser) parseStatement() (Statement, error) {
 
 // ------------------------ DECLARATION -----------------------------
 
+func (p *Parser) parseFunctionDeclaration(kind string) (Statement, error) {
+	functionName, err := p.consume(s.Identifier, fmt.Sprintf("Expect %s name.", kind))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.consume(s.LeftParen, fmt.Sprintf("Expect '(' after %s name.", kind))
+	parameters := make([]s.Token, 0)
+
+	isTokenMatching := p.checkTokenType(s.RightParen)
+	if !isTokenMatching {
+		for {
+			if len(parameters) >= 255 {
+				currentToken := p.peek()
+				return nil, p.error(currentToken, "Can't have more than 255 parameters")
+			}
+
+			parameter, err := p.consume(s.Identifier, "Expect parameter name")
+			if err != nil {
+				return nil, err
+			}
+
+			parameters = append(parameters, parameter)
+
+			if !p.matchTokenAndAdvance(s.Comma) {
+				break
+			}
+		}
+	}
+
+	_, err = p.consume(s.RightParen, "Expect ')' after parameters")
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = p.consume(s.LeftBrace, fmt.Sprintf("Expect '{' before %s body.", kind))
+	if err != nil {
+		return nil, err
+	}
+
+	bodyStatements, err := p.parseBlockStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	functionDeclarationStatement := CreateFunctionSt(functionName, parameters, bodyStatements)
+	return functionDeclarationStatement, nil
+}
+
 func (p *Parser) parseVariableDeclaration() (Statement, error) {
 	// Current index points after the var keyword
 	// Hence we parse the variable name/IDENTIFIER
@@ -484,7 +534,18 @@ func (p *Parser) parseVariableDeclaration() (Statement, error) {
 }
 
 func (p *Parser) parseDeclaration() Statement {
-	// We first try checking for a 'var' keyword
+	// If checking for a 'fun' keyword exists
+	if p.matchTokenAndAdvance(s.Fun) {
+		functionStatement, err := p.parseFunctionDeclaration("function")
+		if err != nil {
+			p.synchronizeFromError()
+			return nil
+		}
+
+		return functionStatement
+	}
+
+	// If checking for a 'var' keyword exists
 	if p.matchTokenAndAdvance(s.Var) {
 		// If yes, we parse it as a variable statement
 		variableStatement, err := p.parseVariableDeclaration()

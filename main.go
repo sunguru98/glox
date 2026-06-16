@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	i "github.com/sunguru98/glox/interpreter"
 	l "github.com/sunguru98/glox/lib"
 	p "github.com/sunguru98/glox/parser"
 	s "github.com/sunguru98/glox/scanner"
 )
 
-var interpreter = i.InitInterpreter()
+var interpreter = p.InitInterpreter()
 
 func Run(source string) {
 	// Scanner
