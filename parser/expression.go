@@ -1,6 +1,8 @@
 package parser
 
-import s "github.com/sunguru98/glox/scanner"
+import (
+	s "github.com/sunguru98/glox/scanner"
+)
 
 // Operators are arithmetic/Logical symbols which are already defined as 'Token's
 

@@ -150,6 +150,7 @@ func CreateFunctionSt(name s.Token, params []s.Token, body []Statement) *Functio
 	return &FunctionSt{
 		Name:   name,
 		Params: params,
+		Body:   body,
 	}
 }
 

@@ -160,6 +160,143 @@ func (p *Parser) synchronizeFromError() {
 	}
 }
 
+// ------------------------ DECLARATION -----------------------------
+
+func (p *Parser) parseVariableDeclaration() (Statement, error) {
+	// Current index points after the var keyword
+	// Hence we parse the variable name/IDENTIFIER
+	identifierToken, err := p.consume(s.Identifier, "Expect variable name.")
+	if err != nil {
+		return nil, err
+	}
+
+	// We initially assume the variable is uninitialized
+	var initializer Expression = nil
+	// Hence we check if there exists an equal sign
+	if p.matchTokenAndAdvance(s.Equal) {
+		expressionResult, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		// If it exists, that means there exists an initializer
+		// Which equates to the result of the expression
+		initializer = expressionResult
+	}
+
+	// We then consume the semicolon character to finish the var statement
+	_, err = p.consume(s.Semicolon, "Expect ; after variable declaration")
+	if err != nil {
+		return nil, err
+	}
+
+	// Followed by generating a statement node
+	return CreateVariableSt(identifierToken, initializer), nil
+}
+
+func (p *Parser) parseFunctionDeclaration(kind string) (Statement, error) {
+	// Parsing the function name (Anything before the start of left paren)
+	functionName, err := p.consume(s.Identifier, fmt.Sprintf("Expect %s name.", kind))
+	if err != nil {
+		return nil, err
+	}
+
+	// We expect the function definition to start with left paren
+	_, err = p.consume(s.LeftParen, fmt.Sprintf("Expect '(' after %s name.", kind))
+	// And collect the parameters inside
+	parameters := make([]s.Token, 0)
+
+	// If the right paren begins right after left paren,
+	// It means there are no parameters
+	if isTokenMatching := p.checkTokenType(s.RightParen); !isTokenMatching {
+		// If not, we start parsing each parameter
+		for {
+			// The parameter list should not be beyond 255
+			if len(parameters) >= 255 {
+				currentToken := p.peek()
+				return nil, p.error(currentToken, "Can't have more than 255 parameters")
+			}
+
+			// Else, we consume it as an IDENTIFIER
+			// Just like var identifier
+			parameter, err := p.consume(s.Identifier, "Expect parameter name")
+			if err != nil {
+				return nil, err
+			}
+
+			// And add it to the list
+			parameters = append(parameters, parameter)
+
+			// We do this, until there are no more commas inside the parentheses
+			// Which means, there will be any arguments
+			if !p.matchTokenAndAdvance(s.Comma) {
+				break
+			}
+		}
+	}
+
+	// The right paren is then consumed
+	_, err = p.consume(s.RightParen, "Expect ')' after parameters")
+	if err != nil {
+		return nil, err
+	}
+
+	// Followed by the left brace (To check for the function block)
+	_, err = p.consume(s.LeftBrace, fmt.Sprintf("Expect '{' before %s body.", kind))
+	if err != nil {
+		return nil, err
+	}
+
+	// The whole block statement (function body) is parsed
+	// With right brace being parsed/consumed inside
+	bodyStatements, err := p.parseBlockStatement()
+	if err != nil {
+		return nil, err
+	}
+
+	// The complete function is then parsed
+	functionDeclarationStatement := CreateFunctionSt(functionName, parameters, bodyStatements)
+	return functionDeclarationStatement, nil
+}
+
+func (p *Parser) parseDeclaration() Statement {
+	// If checking for a 'fun' keyword exists
+	if p.matchTokenAndAdvance(s.Fun) {
+		functionStatement, err := p.parseFunctionDeclaration("function")
+		if err != nil {
+			p.synchronizeFromError()
+			return nil
+		}
+
+		return functionStatement
+	}
+
+	// If checking for a 'var' keyword exists
+	if p.matchTokenAndAdvance(s.Var) {
+		// If yes, we parse it as a variable statement
+		variableStatement, err := p.parseVariableDeclaration()
+		if err != nil {
+			// If there exists an error, we synchronize
+			// Check p.synchronizeFromError
+			p.synchronizeFromError()
+			return nil
+		}
+
+		// Else we return the evaluated variable statement
+		return variableStatement
+	}
+
+	// Every declaration statement is a subset of a statement
+	// Hence we parse that
+	statement, err := p.parseStatement()
+	if err != nil {
+		p.synchronizeFromError()
+		return nil
+	}
+
+	return statement
+}
+
 // ------------------------------------------------------------------
 
 // ------------------------ STATEMENTS -----------------------------
@@ -450,129 +587,6 @@ func (p *Parser) parseStatement() (Statement, error) {
 
 // ------------------------------------------------------------------
 
-// ------------------------ DECLARATION -----------------------------
-
-func (p *Parser) parseFunctionDeclaration(kind string) (Statement, error) {
-	functionName, err := p.consume(s.Identifier, fmt.Sprintf("Expect %s name.", kind))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = p.consume(s.LeftParen, fmt.Sprintf("Expect '(' after %s name.", kind))
-	parameters := make([]s.Token, 0)
-
-	isTokenMatching := p.checkTokenType(s.RightParen)
-	if !isTokenMatching {
-		for {
-			if len(parameters) >= 255 {
-				currentToken := p.peek()
-				return nil, p.error(currentToken, "Can't have more than 255 parameters")
-			}
-
-			parameter, err := p.consume(s.Identifier, "Expect parameter name")
-			if err != nil {
-				return nil, err
-			}
-
-			parameters = append(parameters, parameter)
-
-			if !p.matchTokenAndAdvance(s.Comma) {
-				break
-			}
-		}
-	}
-
-	_, err = p.consume(s.RightParen, "Expect ')' after parameters")
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = p.consume(s.LeftBrace, fmt.Sprintf("Expect '{' before %s body.", kind))
-	if err != nil {
-		return nil, err
-	}
-
-	bodyStatements, err := p.parseBlockStatement()
-	if err != nil {
-		return nil, err
-	}
-
-	functionDeclarationStatement := CreateFunctionSt(functionName, parameters, bodyStatements)
-	return functionDeclarationStatement, nil
-}
-
-func (p *Parser) parseVariableDeclaration() (Statement, error) {
-	// Current index points after the var keyword
-	// Hence we parse the variable name/IDENTIFIER
-	identifierToken, err := p.consume(s.Identifier, "Expect variable name.")
-	if err != nil {
-		return nil, err
-	}
-
-	// We initially assume the variable is uninitialized
-	var initializer Expression = nil
-	// Hence we check if there exists an equal sign
-	if p.matchTokenAndAdvance(s.Equal) {
-		expressionResult, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-
-		// If it exists, that means there exists an initializer
-		// Which equates to the result of the expression
-		initializer = expressionResult
-	}
-
-	// We then consume the semicolon character to finish the var statement
-	_, err = p.consume(s.Semicolon, "Expect ; after variable declaration")
-	if err != nil {
-		return nil, err
-	}
-
-	// Followed by generating a statement node
-	return CreateVariableSt(identifierToken, initializer), nil
-}
-
-func (p *Parser) parseDeclaration() Statement {
-	// If checking for a 'fun' keyword exists
-	if p.matchTokenAndAdvance(s.Fun) {
-		functionStatement, err := p.parseFunctionDeclaration("function")
-		if err != nil {
-			p.synchronizeFromError()
-			return nil
-		}
-
-		return functionStatement
-	}
-
-	// If checking for a 'var' keyword exists
-	if p.matchTokenAndAdvance(s.Var) {
-		// If yes, we parse it as a variable statement
-		variableStatement, err := p.parseVariableDeclaration()
-		if err != nil {
-			// If there exists an error, we synchronize
-			// Check p.synchronizeFromError
-			p.synchronizeFromError()
-			return nil
-		}
-
-		// Else we return the evaluated variable statement
-		return variableStatement
-	}
-
-	// Every declaration statement is a subset of a statement
-	// Hence we parse that
-	statement, err := p.parseStatement()
-	if err != nil {
-		p.synchronizeFromError()
-		return nil
-	}
-
-	return statement
-}
-
-// ------------------------------------------------------------------
-
 // ------------------------- EXPRESSION -----------------------------
 // Functions are defined from top to bottom (lowest precedence to highest)
 // Each parsing precedence has it's own grammar
@@ -618,7 +632,7 @@ func (p *Parser) parseAssignment() (Expression, error) {
 		// Else, fetch the variable name and return as an assignment expression
 		// With the new value
 		variableName := variableExpression.Name
-		return CreateAssignmentExpression(variableName, valueExpression), nil
+		assignmentExpression = CreateAssignmentExpression(variableName, valueExpression)
 	}
 
 	return assignmentExpression, nil
@@ -655,7 +669,7 @@ func (p *Parser) parseLogicOr() (Expression, error) {
 		}
 
 		// Re-initialize the new Logical OR expression
-		logicalOrExpression = CreateLogicalExpression(logicalAndLeft, operator, logicalAndRight)
+		logicalOrExpression = CreateLogicalExpression(logicalOrExpression, operator, logicalAndRight)
 	}
 
 	return logicalOrExpression, nil
@@ -692,7 +706,7 @@ func (p *Parser) parseLogicAnd() (Expression, error) {
 		}
 
 		// Re-initialize the new Logical AND expression
-		logicalAndExpression = CreateLogicalExpression(equalityLeft, operator, equalityRight)
+		logicalAndExpression = CreateLogicalExpression(logicalAndExpression, operator, equalityRight)
 	}
 
 	return logicalAndExpression, nil
@@ -729,7 +743,7 @@ func (p *Parser) parseEquality() (Expression, error) {
 
 		// We then conjoin the initial left comparison expression
 		// The operator and the right comparison expression
-		equalityExpression = CreateBinaryExpression(comparisonLeftExpression, operator, comparisonRightExpression)
+		equalityExpression = CreateBinaryExpression(equalityExpression, operator, comparisonRightExpression)
 	}
 
 	return equalityExpression, nil
@@ -766,7 +780,7 @@ func (p *Parser) parseComparison() (Expression, error) {
 
 		// We then conjoin the initial left term expression
 		// The operator and the right term expression
-		comparisonExpression = CreateBinaryExpression(termLeftExpression, operator, termRightExpression)
+		comparisonExpression = CreateBinaryExpression(comparisonExpression, operator, termRightExpression)
 	}
 
 	return comparisonExpression, nil
@@ -803,7 +817,7 @@ func (p *Parser) parseTerm() (Expression, error) {
 
 		// We then conjoin the initial left factor expression
 		// The operator and the right factor expression
-		termExpression = CreateBinaryExpression(factorLeftExpression, operator, factorRightExpression)
+		termExpression = CreateBinaryExpression(termExpression, operator, factorRightExpression)
 	}
 
 	return termExpression, nil
@@ -841,7 +855,7 @@ func (p *Parser) parseFactor() (Expression, error) {
 
 		// We then conjoin the initial left unary expression
 		// The operator and the right unary expression
-		factorExpression = CreateBinaryExpression(unaryLeftExpression, operator, unaryRightExpression)
+		factorExpression = CreateBinaryExpression(factorExpression, operator, unaryRightExpression)
 	}
 
 	return factorExpression, nil
@@ -900,9 +914,9 @@ func (p *Parser) parseCall() (Expression, error) {
 		if !p.checkTokenType(s.RightParen) {
 			for {
 				// Check if the arguments exceeds the
-				// Size limit of 254
+				// Size limit of 255
 				// We allocate 1 for the 'this' keyword for instance methods
-				if len(arguments) > 254 {
+				if len(arguments) >= 255 {
 					extraArgument := p.peek()
 					return nil, p.error(extraArgument, "Cannot have more than 255 arguments")
 				}

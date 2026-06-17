@@ -47,7 +47,6 @@ func (e *Environment) Assign(name s.Token, value any) error {
 
 	// If there exists an outer scope/environment pick that
 	if e.Enclosing != nil {
-		// fmt.Println("Assign: Enclosing exists")
 		err := e.Enclosing.Assign(name, value)
 		if err != nil {
 			return err

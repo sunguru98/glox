@@ -37,92 +37,11 @@ func (i *Interpreter) Interpret(statements []Statement) {
 	}
 }
 
-// -------------------------------------------------------------------
-
-// ------------------------ UTILS ------------------------------------
-
-func (i *Interpreter) isTruthy(object any) bool {
-	// We consider anything that's nil/false to be false
-	if object == nil {
-		return false
-	}
-
-	// Or, if the object is already of a bool type
-	// We just return the value of it
-	if value, ok := object.(bool); ok {
-		return value
-	}
-
-	// Else, anything apart (empty string, 0, etc) from above two is true.
-	return true
-}
-
-func (i *Interpreter) isEqual(aObj, bObj any) bool {
-	// Two nils is going to be equal anyways
-	if aObj == nil && bObj == nil {
-		return true
-	}
-
-	// We check a being nil and b not being
-	if aObj == nil {
-		return false
-	}
-
-	// Else, we just try equalizing both and checking it
-	return reflect.DeepEqual(aObj, bObj)
-}
-
-func (i *Interpreter) checkNumericOperand(operator s.Token, operand any) (float64, error) {
-	// Check if it's actually a parsed number
-	if value, ok := operand.(float64); ok {
-		return value, nil
-	}
-
-	// Else return an error
-	return 0, fmt.Errorf("Operand must be a number\n[line %d]", operator.LineNumber)
-}
-
-func (i *Interpreter) checkNumericOperands(operator s.Token, left, right any) (float64, float64, error) {
-	// Check if both numbers are parsed ones (double/float64)
-	v, ok := left.(float64)
-	v1, ok2 := right.(float64)
-
-	if ok && ok2 {
-		return v, v1, nil
-	}
-
-	// Else return an error
-	return 0, 0, fmt.Errorf("Operands must be numbers\n[line %d]", operator.LineNumber)
-}
-
-func (i *Interpreter) stringify(object any) string {
-	// A nil value is simply nil in Lox
-	if object == nil {
-		return "nil"
-	}
-
-	// If the object is of a number
-	if value, ok := object.(float64); ok {
-		// We format it to string without losing the decimal precision
-		text := strconv.FormatFloat(value, 'f', -1, 64)
-		// And strip off the decimals
-		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
-			text = text[0 : len(text)-2]
-		}
-
-		return text
-	}
-
-	// Else, we simply stringify the raw value
-	return fmt.Sprintf("%v", object)
-}
-
 // Execute handles all sorts of
 // 1. Statements (Print, Expression, If, Block)
 // 2. Variables
 
 func (i *Interpreter) execute(st Statement) error {
-
 	switch statement := st.(type) {
 	case *PrintSt:
 		// We evaluate the expression after print keyword
@@ -135,7 +54,9 @@ func (i *Interpreter) execute(st Statement) error {
 		fmt.Println(i.stringify(value))
 
 	case *FunctionSt:
+		// The function declaration statement is bunched as a function
 		function := CreateFunction(statement)
+		// And mapped with the interpreter with function name - node
 		i.Env.Define(statement.Name.Lexeme, function)
 
 	case *ExpressionSt:
@@ -214,28 +135,6 @@ func (i *Interpreter) execute(st Statement) error {
 	return nil
 }
 
-func (i *Interpreter) executeBlock(statements []Statement, environment *Environment) error {
-	// Keeping track of the parent environment
-	previousEnvironment := i.Env
-	// And switching temporarily the parent as the block env
-	i.Env = environment
-
-	// Once the environment is switched to block
-	for _, st := range statements {
-		// We execute the statements based on that block env
-		err := i.execute(st)
-		if err != nil {
-			// We switch back env if the execution is stopped midway
-			i.Env = previousEnvironment
-			return err
-		}
-	}
-
-	// And then switching back to the parent environment
-	i.Env = previousEnvironment
-	return nil
-}
-
 // Evaluate handles all expression types
 // 1. Literal
 // 2. Grouping
@@ -244,6 +143,7 @@ func (i *Interpreter) executeBlock(statements []Statement, environment *Environm
 // 5. Variable
 // 6. Assignment
 // 7. Logical (|| and &&)
+// 8. Function call expression
 
 func (i *Interpreter) evaluate(expression Expression) (any, error) {
 	switch exp := expression.(type) {
@@ -326,12 +226,16 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		return value, nil
 
 	case *Call:
-		// Evaluating the expression before parentheses
+		// When a call expression is first met
+		// FunctionName()
+		// The interpreter wouldn't know what to do with that function
+		// Hence we evaluate the FunctionSt Node to generate a function mapping with interpreter
 		callee, err := i.evaluate(exp.Callee)
 		if err != nil {
 			return nil, err
 		}
 
+		// The arguments of each Call Statement is evaluated
 		arguments := make([]any, 0)
 		for _, argument := range exp.Arguments {
 			evaluatedArg, err := i.evaluate(argument)
@@ -343,17 +247,23 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		}
 
 		argumentsLen := len(arguments)
+		// The callee expression is being checked
+		// if it's of type Callable \
 		function, ok := callee.(Callable)
 		if !ok {
 			return nil, fmt.Errorf("%s: Can only call functions and classes", exp.Paren)
 		}
 
+		// And the arguments received in the call statement
+		// Is checked against the function declaration parameters size
 		if argumentsLen != function.Arity() {
 			return nil, fmt.Errorf("%s: Expected %d arguments, but got %d.", exp.Paren, function.Arity(), argumentsLen)
 		}
 
+		// The corresponding function is then called
 		callResult := function.Call(i, arguments)
 
+		// And fetches the result
 		return callResult, nil
 
 	case *Binary:
@@ -462,6 +372,108 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 	// No other expression exists other than the above.
 	return nil, nil
+}
+
+// -------------------------------------------------------------------
+
+// ------------------------ UTILS ------------------------------------
+
+func (i *Interpreter) executeBlock(statements []Statement, environment *Environment) error {
+	// Keeping track of the parent environment
+	previousEnvironment := i.Env
+	// And switching temporarily the parent as the block env
+	i.Env = environment
+
+	// Once the environment is switched to block
+	for _, st := range statements {
+		// We execute the statements based on that block env
+		err := i.execute(st)
+		if err != nil {
+			// We switch back env if the execution is stopped midway
+			i.Env = previousEnvironment
+			return err
+		}
+	}
+
+	// And then switching back to the parent environment
+	i.Env = previousEnvironment
+	return nil
+}
+
+func (i *Interpreter) isTruthy(object any) bool {
+	// We consider anything that's nil/false to be false
+	if object == nil {
+		return false
+	}
+
+	// Or, if the object is already of a bool type
+	// We just return the value of it
+	if value, ok := object.(bool); ok {
+		return value
+	}
+
+	// Else, anything apart (empty string, 0, etc) from above two is true.
+	return true
+}
+
+func (i *Interpreter) isEqual(aObj, bObj any) bool {
+	// Two nils is going to be equal anyways
+	if aObj == nil && bObj == nil {
+		return true
+	}
+
+	// We check a being nil and b not being
+	if aObj == nil {
+		return false
+	}
+
+	// Else, we just try equalizing both and checking it
+	return reflect.DeepEqual(aObj, bObj)
+}
+
+func (i *Interpreter) checkNumericOperand(operator s.Token, operand any) (float64, error) {
+	// Check if it's actually a parsed number
+	if value, ok := operand.(float64); ok {
+		return value, nil
+	}
+
+	// Else return an error
+	return 0, fmt.Errorf("Operand must be a number\n[line %d]", operator.LineNumber)
+}
+
+func (i *Interpreter) checkNumericOperands(operator s.Token, left, right any) (float64, float64, error) {
+	// Check if both numbers are parsed ones (double/float64)
+	v, ok := left.(float64)
+	v1, ok2 := right.(float64)
+
+	if ok && ok2 {
+		return v, v1, nil
+	}
+
+	// Else return an error
+	return 0, 0, fmt.Errorf("Operands must be numbers\n[line %d]", operator.LineNumber)
+}
+
+func (i *Interpreter) stringify(object any) string {
+	// A nil value is simply nil in Lox
+	if object == nil {
+		return "nil"
+	}
+
+	// If the object is of a number
+	if value, ok := object.(float64); ok {
+		// We format it to string without losing the decimal precision
+		text := strconv.FormatFloat(value, 'f', -1, 64)
+		// And strip off the decimals
+		if hasDecimal := strings.HasSuffix(text, ".0"); hasDecimal {
+			text = text[0 : len(text)-2]
+		}
+
+		return text
+	}
+
+	// Else, we simply stringify the raw value
+	return fmt.Sprintf("%v", object)
 }
 
 // -----------------------------------------------------------------------------
