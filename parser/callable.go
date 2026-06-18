@@ -17,9 +17,11 @@ func (r *ReturnValue) Error() string {
 }
 
 // ----------------------------------------------------------------------------------------
+// All functions in the programming language implement this interface
+
 type Callable interface {
-	Arity() int
-	Call(interpreter *Interpreter, arguments []any) (any, error)
+	Arity() int                                                  // Represents number of parameters
+	Call(interpreter *Interpreter, arguments []any) (any, error) // The function body invocation logic
 }
 
 // ----------------------------------------------------------------------------------------
@@ -69,12 +71,12 @@ func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) 
 	err := interpreter.executeBlock(f.Declaration.Body, environment)
 	if err != nil {
 		// Check if the error is of type ReturnValue
-		var returnValue *ReturnValue
-		if errors.As(err, &returnValue) {
+		if returnValue, ok := errors.AsType[*ReturnValue](err); ok {
 			// If yes, fetch the value and return
 			return returnValue.Value, nil
 		}
 
+		// Else, it's a regular non-return value error
 		return nil, err
 	}
 
