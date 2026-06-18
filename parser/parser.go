@@ -544,6 +544,33 @@ func (p *Parser) parseBlockStatement() ([]Statement, error) {
 	return statements, nil
 }
 
+func (p *Parser) parseReturnStatement() (Statement, error) {
+	// The return keyword is preserved for line number error reporting
+	keyword := p.peekPrevious()
+	// By default, return values are nil
+	var returnValue Expression = nil
+
+	// But if there exists an expression before a semicolon, we parse it
+	// And set that as the return value
+	if !p.checkTokenType(s.Semicolon) {
+		value, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+
+		returnValue = value
+	}
+
+	// We then check/consume the semicolon
+	_, err := p.consume(s.Semicolon, "Expect ; after return value")
+	if err != nil {
+		return nil, err
+	}
+
+	returnStatement := CreateReturnSt(keyword, returnValue)
+	return returnStatement, nil
+}
+
 func (p *Parser) parseStatement() (Statement, error) {
 	// If the statement starts with the 'if' keyword
 	// Consider it as an if statement
@@ -555,6 +582,12 @@ func (p *Parser) parseStatement() (Statement, error) {
 	// Consider it as a print statement
 	if p.matchTokenAndAdvance(s.Print) {
 		return p.parsePrintStatement()
+	}
+
+	// If the statement starts with the 'return' keyword
+	// Consider it as a return statement
+	if p.matchTokenAndAdvance(s.Return) {
+		return p.parseReturnStatement()
 	}
 
 	// If the statement starts with the 'while' keyword

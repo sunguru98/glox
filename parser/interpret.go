@@ -130,6 +130,23 @@ func (i *Interpreter) execute(st Statement) error {
 		if err != nil {
 			return err
 		}
+
+	case *ReturnSt:
+		// By default, return is nil
+		var returnValue any = nil
+		// If not nil, we equate the value
+		if statement.Value != nil {
+			value, err := i.evaluate(statement.Value)
+			if err != nil {
+				return err
+			}
+
+			returnValue = value
+		}
+
+		return &ReturnValue{
+			Value: returnValue,
+		}
 	}
 
 	return nil
@@ -261,7 +278,10 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		}
 
 		// The corresponding function is then called
-		callResult := function.Call(i, arguments)
+		callResult, err := function.Call(i, arguments)
+		if err != nil {
+			return nil, err
+		}
 
 		// And fetches the result
 		return callResult, nil

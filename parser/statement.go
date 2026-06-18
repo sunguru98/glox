@@ -10,6 +10,7 @@ import s "github.com/sunguru98/glox/scanner"
 // 4. Block statements
 // 5. Conditional if statement
 // 6. While/For statement
+// 7. Return statement
 
 type Statement interface {
 	stmnt()
@@ -151,6 +152,25 @@ func CreateFunctionSt(name s.Token, params []s.Token, body []Statement) *Functio
 		Name:   name,
 		Params: params,
 		Body:   body,
+	}
+}
+
+// -------------------------------------------------------------------------------------------------------------------------
+
+// A return statement is of grammar
+// Here expression is optional as not all functions return
+// 'return' (expression)? ';'
+type ReturnSt struct {
+	Keyword s.Token // The return keyword is preserved for line number error reporting
+	Value   Expression
+}
+
+func (*ReturnSt) stmnt() {}
+
+func CreateReturnSt(keyword s.Token, value Expression) *ReturnSt {
+	return &ReturnSt{
+		Keyword: keyword,
+		Value:   value,
 	}
 }
 
