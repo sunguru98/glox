@@ -12,8 +12,24 @@ fun fib(n) {
   return fib(n - 2) + fib(n - 1);
 }
 
+// Function with a closure
+fun makeCounter() {
+  var i = 0;
+  fun count() {
+    i = i + 1;
+    print i;
+  }
+
+  return count;
+}
+
+
 // Function calls
 add(1, 2, 3);
+
+var counter = makeCounter();
+counter(); // "1".
+counter(); // "2".
 
 sayHi("Dear", "Reader");
 

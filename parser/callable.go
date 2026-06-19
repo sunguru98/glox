@@ -46,6 +46,7 @@ func (*Clock) String() string {
 // A function type in the programming language
 type Function struct {
 	Declaration *FunctionSt
+	ClosureEnv  *Environment // The environment outside the function declaration
 }
 
 func (f *Function) Arity() int {
@@ -54,9 +55,9 @@ func (f *Function) Arity() int {
 }
 
 func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) {
-	// We create a sub-environment with "global" space being the parent
+	// We create a sub-environment with the attached closure environment being the parent
 	// You could think like a "stack frame" created with a function call
-	environment := InitEnvironment(interpreter.Globals)
+	environment := InitEnvironment(f.ClosureEnv)
 
 	// For whatever argument is passed in the function call,
 	// We map with the function declaration parameter
@@ -89,8 +90,9 @@ func (f *Function) String() string {
 	return fmt.Sprintf("<fn %s >", f.Declaration.Name.Lexeme)
 }
 
-func CreateFunction(declaration *FunctionSt) *Function {
+func CreateFunction(declaration *FunctionSt, closureEnv *Environment) *Function {
 	return &Function{
+		ClosureEnv:  closureEnv,
 		Declaration: declaration,
 	}
 }

@@ -55,7 +55,9 @@ func (i *Interpreter) execute(st Statement) error {
 
 	case *FunctionSt:
 		// The function declaration statement is bunched as a function
-		function := CreateFunction(statement)
+		// And the current environment is attached with this function
+		// So that closure patterns work as higher order functions
+		function := CreateFunction(statement, i.Env)
 		// And mapped with the interpreter with function name - node
 		i.Env.Define(statement.Name.Lexeme, function)
 
