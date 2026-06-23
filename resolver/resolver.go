@@ -23,11 +23,11 @@ func InitResolver(interpreter *p.Interpreter) *Resolver {
 
 func (r *Resolver) resolve(blockSt p.BlockSt) {
 	r.beginScope()
-	r.resolveStatements(blockSt.Statements)
+	r.ResolveStatements(blockSt.Statements)
 	r.endScope()
 }
 
-func (r *Resolver) resolveStatements(statements []p.Statement) {
+func (r *Resolver) ResolveStatements(statements []p.Statement) {
 	for _, statement := range statements {
 		r.resolveStatement(statement)
 	}
@@ -114,11 +114,13 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 }
 
 func (r *Resolver) resolveLocal(expr p.Expression, name s.Token) {
-	for index := len(r.Scopes) - 1; index >= 0; index -= 1 {
+	scopesLen := len(r.Scopes) - 1
+	for index := scopesLen; index >= 0; index -= 1 {
 		scope := r.Scopes[index]
 		_, ok := scope[name.Lexeme]
+
 		if ok {
-			// TODO: Interpreter resolve
+			r.Interpreter.Resolve(expr, scopesLen-index)
 			return
 		}
 	}
@@ -131,7 +133,7 @@ func (r *Resolver) resolveFunction(function *p.FunctionSt) {
 		r.define(param)
 	}
 
-	r.resolveStatements(function.Body)
+	r.ResolveStatements(function.Body)
 	r.endScope()
 }
 

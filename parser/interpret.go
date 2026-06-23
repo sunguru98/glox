@@ -13,6 +13,7 @@ import (
 type Interpreter struct {
 	Globals *Environment
 	Env     *Environment
+	Locals  map[Expression]int
 }
 
 // ------------------------PRIMARY FUNCTIONS -------------------------
@@ -24,6 +25,7 @@ func InitInterpreter() *Interpreter {
 	return &Interpreter{
 		Globals: globals,
 		Env:     globals,
+		Locals:  make(map[Expression]int),
 	}
 }
 
@@ -35,6 +37,10 @@ func (i *Interpreter) Interpret(statements []Statement) {
 			lib.RuntimeError(err)
 		}
 	}
+}
+
+func (i *Interpreter) Resolve(expression Expression, depth int) {
+	i.Locals[expression] = depth
 }
 
 // Execute handles all sorts of
@@ -224,9 +230,15 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		}
 
 	case *Variable:
-		// A variable expression needs the value
-		// That is mapped to the environment
-		return i.Env.Get(exp.Name)
+		// Try getting the scope distance of the variable expression
+		distance, ok := i.Locals[exp]
+		// If there exists an entry on the locals map
+		// Fetch from the respective scope
+		if ok {
+			return i.Env.GetAt(distance, exp.Name.Lexeme), nil
+		}
+		// Else fetch from the global scope
+		return i.Globals.Get(exp.Name)
 
 	case *Assignment:
 		// We first evaluate the value expression
@@ -235,11 +247,19 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return nil, err
 		}
 
-		// We then (re)assign the above evaluated value
-		// With the variable name
-		err = i.Env.Assign(exp.Name, value)
-		if err != nil {
-			return nil, err
+		// Try getting the scope distance of the variable expression
+		distance, ok := i.Locals[exp]
+		// If there exists an entry on the locals map
+		// (Re)Assign to that respective scope
+		if ok {
+			i.Env.AssignAt(distance, exp.Name, value)
+		} else {
+			// Else, we (re)assign the above evaluated value
+			// With the variable name in global scope
+			err = i.Globals.Assign(exp.Name, value)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		return value, nil

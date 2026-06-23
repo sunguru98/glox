@@ -7,6 +7,7 @@ import (
 
 	l "github.com/sunguru98/glox/lib"
 	p "github.com/sunguru98/glox/parser"
+	r "github.com/sunguru98/glox/resolver"
 	s "github.com/sunguru98/glox/scanner"
 )
 
@@ -27,6 +28,10 @@ func Run(source string) {
 	if l.HadError {
 		return
 	}
+
+	// Resolve any scope related mismatches
+	resolver := r.InitResolver(interpreter)
+	resolver.ResolveStatements(statements)
 
 	// Else evaluate the expression
 	interpreter.Interpret(statements)
