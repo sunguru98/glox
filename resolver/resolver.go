@@ -7,30 +7,44 @@ import (
 )
 
 // --------------------------------------------------------------------------------------------------------
-type Resolver struct {
-	Interpreter *p.Interpreter
-	Scopes      []map[string]bool
-}
 
-func InitResolver(interpreter *p.Interpreter) *Resolver {
-	return &Resolver{
-		Interpreter: interpreter,
-		Scopes:      make([]map[string]bool, 0),
-	}
-}
+type FunctionType = int
+
+const (
+	None FunctionType = iota
+	Function
+)
 
 // --------------------------------------------------------------------------------------------------------
 
-func (r *Resolver) resolve(blockSt p.BlockSt) {
-	r.beginScope()
-	r.ResolveStatements(blockSt.Statements)
-	r.endScope()
+type Resolver struct {
+	Interpreter     *p.Interpreter
+	Scopes          []map[string]bool
+	CurrentFunction FunctionType
+}
+
+// ----------------------------- PRIMARY FUNCTIONS ---------------------------------------------------------
+
+func InitResolver(interpreter *p.Interpreter) *Resolver {
+	return &Resolver{
+		Interpreter:     interpreter,
+		Scopes:          make([]map[string]bool, 0),
+		CurrentFunction: None,
+	}
 }
 
 func (r *Resolver) ResolveStatements(statements []p.Statement) {
 	for _, statement := range statements {
 		r.resolveStatement(statement)
 	}
+}
+
+// ----------------------------- RESOLVER FUNCTIONS -------------------------------------------------------
+
+func (r *Resolver) resolve(blockSt p.BlockSt) {
+	r.beginScope()
+	r.ResolveStatements(blockSt.Statements)
+	r.endScope()
 }
 
 func (r *Resolver) resolveStatement(statement p.Statement) {
@@ -45,7 +59,7 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 	case *p.FunctionSt:
 		r.declare(st.Name)
 		r.define(st.Name)
-		r.resolveFunction(st)
+		r.resolveFunction(st, Function)
 
 	case *p.ExpressionSt:
 		r.resolveExpression(st.Expr)
@@ -61,6 +75,11 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		r.resolveExpression(st.Expr)
 
 	case *p.ReturnSt:
+		keyword := st.Keyword
+		if r.CurrentFunction == None {
+			lib.Report(keyword.LineNumber, " at '"+keyword.Lexeme+"'", "Can't return from top-level code")
+		}
+
 		if st.Value != nil {
 			r.resolveExpression(st.Value)
 		}
@@ -126,7 +145,10 @@ func (r *Resolver) resolveLocal(expr p.Expression, name s.Token) {
 	}
 }
 
-func (r *Resolver) resolveFunction(function *p.FunctionSt) {
+func (r *Resolver) resolveFunction(function *p.FunctionSt, fType FunctionType) {
+	enclosingFunction := r.CurrentFunction
+	r.CurrentFunction = fType
+
 	r.beginScope()
 	for _, param := range function.Params {
 		r.declare(param)
@@ -135,9 +157,11 @@ func (r *Resolver) resolveFunction(function *p.FunctionSt) {
 
 	r.ResolveStatements(function.Body)
 	r.endScope()
+
+	r.CurrentFunction = enclosingFunction
 }
 
-// --------------------------------------------------------------------------------------------------------
+// --------------------------------------- UTILS -----------------------------------------------------------
 
 func (r *Resolver) beginScope() {
 	r.Scopes = append(r.Scopes, make(map[string]bool))
@@ -157,6 +181,11 @@ func (r *Resolver) declare(name s.Token) {
 	}
 
 	scopeTop := r.Scopes[scopesLen-1]
+	_, ok := scopeTop[name.Lexeme]
+	if ok {
+		lib.Report(name.LineNumber, " at '"+name.Lexeme+"'", "Already a variable with this name in this scope")
+	}
+
 	scopeTop[name.Lexeme] = false
 }
 

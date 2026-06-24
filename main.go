@@ -33,6 +33,11 @@ func Run(source string) {
 	resolver := r.InitResolver(interpreter)
 	resolver.ResolveStatements(statements)
 
+	// If resolver marked any errors, we return early
+	if l.HadError {
+		return
+	}
+
 	// Else evaluate the expression
 	interpreter.Interpret(statements)
 }
