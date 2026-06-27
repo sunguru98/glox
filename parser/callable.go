@@ -17,9 +17,11 @@ func (r *ReturnValue) Error() string {
 }
 
 // ----------------------------------------------------------------------------------------
+// All functions in the programming language implement this interface
+
 type Callable interface {
-	Arity() int
-	Call(interpreter *Interpreter, arguments []any) (any, error)
+	Arity() int                                                  // Represents number of parameters
+	Call(interpreter *Interpreter, arguments []any) (any, error) // The function body invocation logic
 }
 
 // ----------------------------------------------------------------------------------------
@@ -44,6 +46,7 @@ func (*Clock) String() string {
 // A function type in the programming language
 type Function struct {
 	Declaration *FunctionSt
+	ClosureEnv  *Environment // The environment outside the function declaration
 }
 
 func (f *Function) Arity() int {
@@ -52,9 +55,9 @@ func (f *Function) Arity() int {
 }
 
 func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) {
-	// We create a sub-environment with "global" space being the parent
+	// We create a sub-environment with the attached closure environment being the parent
 	// You could think like a "stack frame" created with a function call
-	environment := InitEnvironment(interpreter.Globals)
+	environment := InitEnvironment(f.ClosureEnv)
 
 	// For whatever argument is passed in the function call,
 	// We map with the function declaration parameter
@@ -69,12 +72,12 @@ func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) 
 	err := interpreter.executeBlock(f.Declaration.Body, environment)
 	if err != nil {
 		// Check if the error is of type ReturnValue
-		var returnValue *ReturnValue
-		if errors.As(err, &returnValue) {
+		if returnValue, ok := errors.AsType[*ReturnValue](err); ok {
 			// If yes, fetch the value and return
 			return returnValue.Value, nil
 		}
 
+		// Else, it's a regular non-return value error
 		return nil, err
 	}
 
@@ -87,8 +90,9 @@ func (f *Function) String() string {
 	return fmt.Sprintf("<fn %s >", f.Declaration.Name.Lexeme)
 }
 
-func CreateFunction(declaration *FunctionSt) *Function {
+func CreateFunction(declaration *FunctionSt, closureEnv *Environment) *Function {
 	return &Function{
+		ClosureEnv:  closureEnv,
 		Declaration: declaration,
 	}
 }
