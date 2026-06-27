@@ -11,7 +11,9 @@ import (
 type FunctionType = int
 
 const (
+	// By default a code snippet will be outside a function
 	None FunctionType = iota
+	// Setting this if inside a function block
 	Function
 )
 
@@ -68,7 +70,7 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		// Since marking it false would error out when it's value is seen again in the body
 		r.declare(st.Name)
 		r.define(st.Name)
-		// Then the function body is resolved
+		// Then the function body is resolved, with the FunctionType set to Function
 		r.resolveFunction(st, Function)
 
 	case *p.ExpressionSt:
@@ -94,8 +96,11 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		r.resolveExpression(st.Expr)
 
 	case *p.ReturnSt:
-		keyword := st.Keyword
 		if r.CurrentFunction == None {
+			// A return statement should always be inside a function
+			// And not as an empty standalone statement
+			// Hence we mark it as a compiler error
+			keyword := st.Keyword
 			lib.Report(keyword.LineNumber, " at '"+keyword.Lexeme+"'", "Can't return from top-level code")
 		}
 
@@ -119,11 +124,12 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 		// We fetch the last registered variable in scope
 		scopesLen := len(r.Scopes)
 		scopeTop := r.Scopes[scopesLen-1]
-		token := expr.Name
 
 		// And see if the initializer expression's name matches with the variable name
 		// In that case, it's a reinitialization error, and we mark it compile-time
-		if scopesLen != 0 && scopeTop[token.Lexeme] == false {
+		token := expr.Name
+		scopeVal, ok := scopeTop[token.Lexeme]
+		if scopesLen != 0 && (ok && scopeVal == false) {
 			lib.Report(token.LineNumber, " at '"+token.Lexeme+"'", "Can't read local variable in own initializer")
 		}
 
@@ -195,7 +201,9 @@ func (r *Resolver) resolveLocal(expr p.Expression, name s.Token) {
 }
 
 func (r *Resolver) resolveFunction(function *p.FunctionSt, fType FunctionType) {
+	// Assigning a temp variable with the currentFunction value, to change after
 	enclosingFunction := r.CurrentFunction
+	// Temporarily assigning the function type being Function, as the resolution is inside the function
 	r.CurrentFunction = fType
 
 	// The function scope is being attached for the body
@@ -211,6 +219,7 @@ func (r *Resolver) resolveFunction(function *p.FunctionSt, fType FunctionType) {
 	// Followed by the detachment of the same scope.
 	r.endScope()
 
+	// Switching back to whatever r.CurrentFunction was before the switch
 	r.CurrentFunction = enclosingFunction
 }
 

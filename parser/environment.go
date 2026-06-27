@@ -77,12 +77,14 @@ func (e *Environment) Assign(name s.Token, value any) error {
 func (e *Environment) AssignAt(distance int, name s.Token, value any) {
 	// Fetching ancestor environment
 	ancestorEnv := e.fetchAncestor(distance)
+	// And assigning the value at that environment
 	ancestorEnv.Map[name.Lexeme] = value
 }
 
 // ------------------------------------ UTIL FUNCTIONS ---------------------------------------------------
 
 func (e *Environment) fetchAncestor(distance int) *Environment {
+	// Calculating the enclosing environment from the current scope
 	ancestorEnv := e
 	for counter := 0; counter < distance; counter += 1 {
 		ancestorEnv = e.Enclosing
