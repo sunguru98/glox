@@ -45,6 +45,12 @@ func (r *Resolver) ResolveStatements(statements []p.Statement) {
 
 func (r *Resolver) resolveStatement(statement p.Statement) {
 	switch st := statement.(type) {
+	case *p.ClassSt:
+		// A class behaves the same as function
+		// A block exists within, hence we declare and define
+		r.declare(st.Name)
+		r.define(st.Name)
+
 	case *p.BlockSt:
 		// For a block statement, we create a new scope
 		r.beginScope()

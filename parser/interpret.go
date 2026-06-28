@@ -44,7 +44,7 @@ func (i *Interpreter) Resolve(expression Expression, depth int) {
 }
 
 // Execute handles all sorts of
-// 1. Statements (Print, Expression, If, Block)
+// 1. Statements (Print, Expression, If, Block, Function, While, Return, Class)
 // 2. Variables
 
 func (i *Interpreter) execute(st Statement) error {
@@ -155,6 +155,14 @@ func (i *Interpreter) execute(st Statement) error {
 		return &ReturnValue{
 			Value: returnValue,
 		}
+
+	case *ClassSt:
+		// The environment stashes the class name
+		i.Env.Define(statement.Name.Lexeme, nil)
+		// We create a class
+		class := InitClass(statement.Name.Lexeme)
+		// And then assigns the created class with the above defined class name
+		i.Env.Assign(statement.Name, class)
 	}
 
 	return nil

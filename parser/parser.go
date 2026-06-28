@@ -162,6 +162,41 @@ func (p *Parser) synchronizeFromError() {
 
 // ------------------------ DECLARATION -----------------------------
 
+func (p *Parser) parseClassDeclaration() (Statement, error) {
+	// Current index points after the class keyword
+	// Hence we parse the class name/IDENTIFIER
+	identifierToken, err := p.consume(s.Identifier, "Expect class name.")
+	if err != nil {
+		return nil, err
+	}
+
+	// Creating the methods array to stash all possible variations
+	methods := make([]*FunctionSt, 0)
+	for {
+		// The loop runs till we meet the end of the file token
+		// Or a Right brace token is hit
+		if p.checkTokenType(s.RightBrace) || p.isCurrentEOF() {
+			break
+		}
+
+		methodStatement, err := p.parseFunctionDeclaration("method")
+		if err != nil {
+			return nil, err
+		}
+
+		methods = append(methods, methodStatement.(*FunctionSt))
+	}
+
+	// The loop might have been terminated due to EOF, hence we check
+	// By trying to consume the Right brace token
+	_, err = p.consume(s.RightBrace, "Expect '}' after class body")
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateClassSt(identifierToken, methods), nil
+}
+
 func (p *Parser) parseVariableDeclaration() (Statement, error) {
 	// Current index points after the var keyword
 	// Hence we parse the variable name/IDENTIFIER
@@ -260,6 +295,17 @@ func (p *Parser) parseFunctionDeclaration(kind string) (Statement, error) {
 }
 
 func (p *Parser) parseDeclaration() Statement {
+	// If checking for a 'class' keyword exists
+	if p.matchTokenAndAdvance(s.Class) {
+		classStatement, err := p.parseClassDeclaration()
+		if err != nil {
+			p.synchronizeFromError()
+			return nil
+		}
+
+		return classStatement
+	}
+
 	// If checking for a 'fun' keyword exists
 	if p.matchTokenAndAdvance(s.Fun) {
 		functionStatement, err := p.parseFunctionDeclaration("function")
