@@ -152,6 +152,17 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 			r.resolveExpression(argument)
 		}
 
+	case *p.Get:
+		// A get expression could be a member field/method
+		// Hence we resolve the underlying expression (the field/method)
+		r.resolveExpression(expr.Object)
+
+	case *p.Set:
+		// A set expression sets the value w.r.t the object (instance)
+		// Hence we resolve both
+		r.resolveExpression(expr.Value)
+		r.resolveExpression(expr.Object)
+
 	case *p.Assignment:
 		// The assignment operation simply means
 		// To resolve the value it's being assigned to

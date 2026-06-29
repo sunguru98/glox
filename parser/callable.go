@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	s "github.com/sunguru98/glox/scanner"
 )
 
 // ----------------------------------------------------------------------------------------
@@ -98,3 +100,60 @@ func CreateFunction(declaration *FunctionSt, closureEnv *Environment) *Function 
 }
 
 // ----------------------------------------------------------------------------------------
+
+// A class type in the programming language
+type Class struct {
+	Name string
+}
+
+func (c *Class) Arity() int {
+	return 0
+}
+
+func (c *Class) Call(interpreter *Interpreter, arguments []any) (any, error) {
+	return nil, nil
+}
+
+func CreateClass(name string) *Class {
+	return &Class{
+		Name: name,
+	}
+}
+
+func (c *Class) String() string {
+	return c.Name
+}
+
+// ------------------------------------------------------------------------------------------
+
+// An instance type in the programming language (created through Class.Call())
+type Instance struct {
+	class  *Class
+	fields map[string]any
+}
+
+func CreateInstance(class *Class) *Instance {
+	return &Instance{
+		class:  class,
+		fields: make(map[string]any),
+	}
+}
+
+func (i *Instance) String() string {
+	return i.class.Name + " instance"
+}
+
+func (i *Instance) Get(name s.Token) (any, error) {
+	field, ok := i.fields[name.Lexeme]
+	if ok {
+		return field, nil
+	}
+
+	return nil, fmt.Errorf("Undefined property %s", name.Lexeme)
+}
+
+func (i *Instance) Set(name s.Token, value any) {
+	i.fields[name.Lexeme] = value
+}
+
+// ------------------------------------------------------------------------------------------

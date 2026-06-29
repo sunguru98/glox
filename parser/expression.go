@@ -113,7 +113,8 @@ func CreateVariableExpression(name s.Token) *Variable {
 //----------------------------------------------------------------------------------------------------
 
 // 6. Assignment is of the grammar
-// IDENTIFER '=' (assignment | equality)
+// (call '.')? IDENTIFER '=' (assignment | logic_or)
+// An assignment expression can either set a variable or a member field in an instance (class object)
 type Assignment struct {
 	Name  s.Token
 	Value Expression
@@ -153,8 +154,10 @@ func CreateLogicalExpression(left Expression, operator s.Token, right Expression
 //----------------------------------------------------------------------------------------------------
 
 // 8. Call is of the grammar
-// primary '('arguments?')'*
+// primary '('arguments?' | '.' IDENTIFIER)'*
 // A zero argument call can have the arguments optional
+// Call supports both function calls, and Class instance creation
+// The '.' operator is used to call the instance's property/methods
 
 type Call struct {
 	Paren     s.Token // Closing paren token needed for line number reporting
@@ -169,6 +172,44 @@ func CreateCallExpression(callee Expression, paren s.Token, arguments []Expressi
 		Callee:    callee,
 		Paren:     paren,
 		Arguments: arguments,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+
+// 9. Get expressions base on the alternative grammar of Call (above)
+
+type Get struct {
+	Object Expression
+	Name   s.Token
+}
+
+func (*Get) exp() {}
+
+func CreateGetExpression(object Expression, name s.Token) *Get {
+	return &Get{
+		Object: object,
+		Name:   name,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------
+
+// 10. Set expressions base on the alternative grammar of Assignment (above)
+
+type Set struct {
+	Object Expression
+	Name   s.Token
+	Value  Expression
+}
+
+func (*Set) exp() {}
+
+func CreateSetExpression(object Expression, name s.Token, value Expression) *Set {
+	return &Set{
+		Object: object,
+		Name:   name,
+		Value:  value,
 	}
 }
 

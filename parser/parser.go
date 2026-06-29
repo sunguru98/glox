@@ -703,15 +703,22 @@ func (p *Parser) parseAssignment() (Expression, error) {
 		// Check if the assignment expression is of type Variable
 		// That is, a variable that is already declared/initialized with a value
 		variableExpression, ok := assignmentExpression.(*Variable)
-		if !ok {
-			// If not, then the value cannot be assigned
-			return nil, p.error(equalToken, "Invalid assignment target.")
+		if ok {
+			// Fetch the variable name and return as an assignment expression
+			// With the new value
+			variableName := variableExpression.Name
+			return CreateAssignmentExpression(variableName, valueExpression), nil
 		}
 
-		// Else, fetch the variable name and return as an assignment expression
-		// With the new value
-		variableName := variableExpression.Name
-		assignmentExpression = CreateAssignmentExpression(variableName, valueExpression)
+		// Or if the assignment expression is a member field get expression
+		// It means the value is being assigned to the member field (through the dot operator)
+		getExpr, ok := assignmentExpression.(*Get)
+		if ok {
+			return CreateSetExpression(getExpr.Object, getExpr.Name, valueExpression), nil
+		}
+
+		// If not, then the value cannot be assigned
+		return nil, p.error(equalToken, "Invalid assignment target.")
 	}
 
 	return assignmentExpression, nil
@@ -983,6 +990,21 @@ func (p *Parser) parseCall() (Expression, error) {
 		// Assuming func1 returns a function which also returns a function
 		if !p.matchTokenAndAdvance(s.LeftParen) {
 			break
+		}
+
+		// If there exists a dot operator
+		// We consider that as a get expression
+		// A get expression is simply the access of member fields/methods of a class instance
+		if p.matchTokenAndAdvance(s.Dot) {
+			// We consume the name of the member field/method
+			member, err := p.consume(s.Identifier, "Expect property name after .")
+			if err != nil {
+				return nil, err
+			}
+
+			// Followed by constructing a Get expression
+			callExpression = CreateGetExpression(callExpression, member)
+			continue
 		}
 
 		// For each pair of parentheses, we create an argument expression list
