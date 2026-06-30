@@ -103,7 +103,8 @@ func CreateFunction(declaration *FunctionSt, closureEnv *Environment) *Function 
 
 // A class type in the programming language
 type Class struct {
-	Name string
+	Name    string
+	Methods map[string]*Function
 }
 
 func (c *Class) Arity() int {
@@ -114,14 +115,19 @@ func (c *Class) Call(interpreter *Interpreter, arguments []any) (any, error) {
 	return nil, nil
 }
 
-func CreateClass(name string) *Class {
-	return &Class{
-		Name: name,
-	}
-}
-
 func (c *Class) String() string {
 	return c.Name
+}
+
+func (c *Class) FindMethod(name string) *Function {
+	return c.Methods[name]
+}
+
+func CreateClass(name string, methods map[string]*Function) *Class {
+	return &Class{
+		Name:    name,
+		Methods: methods,
+	}
 }
 
 // ------------------------------------------------------------------------------------------
@@ -144,11 +150,19 @@ func (i *Instance) String() string {
 }
 
 func (i *Instance) Get(name s.Token) (any, error) {
+	// If the name is a member field, we return that
 	field, ok := i.fields[name.Lexeme]
 	if ok {
 		return field, nil
 	}
 
+	// Or if it's a member method, we return that instead
+	method := i.class.FindMethod(name.Lexeme)
+	if method != nil {
+		return method, nil
+	}
+
+	// Else, there exists no such name
 	return nil, fmt.Errorf("Undefined property %s", name.Lexeme)
 }
 

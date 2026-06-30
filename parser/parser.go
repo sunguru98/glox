@@ -1079,14 +1079,23 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return CreateLiteralExpression(previousPeekedToken.Literal), nil
 	}
 
-	// 5. An Identifier
+	// 5. The 'this' keyword is a literal, hence we check for the same
+	if p.matchTokenAndAdvance(s.This) {
+		// Whenever we match a token, the current index gets incremented
+		// Hence technically, the token we want is previous
+		// (oldCurrent = newCurrent - 1)
+		previousPeekedToken := p.peekPrevious()
+		return CreateThisExpression(previousPeekedToken), nil
+	}
+
+	// 6. An Identifier
 	if p.matchTokenAndAdvance(s.Identifier) {
 		// Every identifier comes with a variable statement
 		previousPeekedToken := p.peekPrevious()
 		return CreateVariableExpression(previousPeekedToken), nil
 	}
 
-	// 6. A grouping expression "(expression)"
+	// 7. A grouping expression "(expression)"
 	// starts with left parentheses
 	if p.matchTokenAndAdvance(s.LeftParen) {
 		// Call the lowest matching expression

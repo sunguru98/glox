@@ -15,6 +15,8 @@ const (
 	None FunctionType = iota
 	// Setting this if inside a function block
 	Function
+	// Setting this if inside a class method
+	Method
 )
 
 // ------------------------------ RESOLVER STRUCT ----------------------------------------------------------
@@ -50,6 +52,12 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		// A block exists within, hence we declare and define
 		r.declare(st.Name)
 		r.define(st.Name)
+
+		// Every class has it's own member methods for their instances
+		// We resolve each of their methods
+		for _, method := range st.Methods {
+			r.resolveFunction(method, Method)
+		}
 
 	case *p.BlockSt:
 		// For a block statement, we create a new scope

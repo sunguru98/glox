@@ -214,3 +214,19 @@ func CreateSetExpression(object Expression, name s.Token, value Expression) *Set
 }
 
 //----------------------------------------------------------------------------------------------------
+
+// 11. This keyword contains the instance reference it's holding for the class definition
+
+type This struct {
+	Keyword s.Token
+}
+
+func (*This) exp() {}
+
+func CreateThisExpression(keyword s.Token) *This {
+	return &This{
+		Keyword: keyword,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------

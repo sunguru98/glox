@@ -152,6 +152,7 @@ func (i *Interpreter) execute(st Statement) error {
 			returnValue = value
 		}
 
+		// Else we return a custom error as the return value
 		return &ReturnValue{
 			Value: returnValue,
 		}
@@ -159,8 +160,17 @@ func (i *Interpreter) execute(st Statement) error {
 	case *ClassSt:
 		// The environment stashes the class name
 		i.Env.Define(statement.Name.Lexeme, nil)
-		// We create a class
-		class := CreateClass(statement.Name.Lexeme)
+
+		// The methods parsed inside the class
+		// Are defined, and stashed inside the class
+		methods := make(map[string]*Function)
+		for _, method := range statement.Methods {
+			function := CreateFunction(method, i.Env)
+			methods[method.Name.Lexeme] = function
+		}
+
+		// We create a class with the name and it's associated methods
+		class := CreateClass(statement.Name.Lexeme, methods)
 		// And then assigns the created class with the above defined class name
 		i.Env.Assign(statement.Name, class)
 	}
