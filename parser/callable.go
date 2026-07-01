@@ -47,8 +47,9 @@ func (*Clock) String() string {
 
 // A function type in the programming language
 type Function struct {
-	Declaration *FunctionSt
-	ClosureEnv  *Environment // The environment outside the function declaration
+	IsInitializer bool
+	Declaration   *FunctionSt
+	ClosureEnv    *Environment // The environment outside the function declaration
 }
 
 func (f *Function) Arity() int {
@@ -75,6 +76,11 @@ func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) 
 	if err != nil {
 		// Check if the error is of type ReturnValue
 		if returnValue, ok := errors.AsType[*ReturnValue](err); ok {
+			// If the function is a constructor function, we fetch the value of 'this'
+			if f.IsInitializer {
+				return f.ClosureEnv.GetAt(0, "this"), nil
+			}
+
 			// If yes, fetch the value and return
 			return returnValue.Value, nil
 		}
@@ -83,7 +89,13 @@ func (f *Function) Call(interpreter *Interpreter, arguments []any) (any, error) 
 		return nil, err
 	}
 
-	// By default all functions are of 'void' type
+	// If the function calling is an initializer function
+	// The closure environment surrounding it is the immediate one with 'this' keyword
+	if f.IsInitializer {
+		return f.ClosureEnv.GetAt(0, "this"), nil
+	}
+
+	// Else, by default all functions are of 'void' type
 	// Meaning they return nil unless specified
 	return nil, nil
 }
@@ -92,10 +104,21 @@ func (f *Function) String() string {
 	return fmt.Sprintf("<fn %s >", f.Declaration.Name.Lexeme)
 }
 
-func CreateFunction(declaration *FunctionSt, closureEnv *Environment) *Function {
+func (f *Function) Bind(instance *Instance) *Function {
+	// A new environment is created keeping the closure as the parent
+	env := InitEnvironment(f.ClosureEnv)
+	// The environment then assigns the this keyword to be locked within that scope
+	env.Define("this", instance)
+
+	// And the resultant function/method is created through that environment
+	return CreateFunction(f.Declaration, env, f.IsInitializer)
+}
+
+func CreateFunction(declaration *FunctionSt, closureEnv *Environment, initializer bool) *Function {
 	return &Function{
-		ClosureEnv:  closureEnv,
-		Declaration: declaration,
+		ClosureEnv:    closureEnv,
+		Declaration:   declaration,
+		IsInitializer: initializer,
 	}
 }
 
@@ -108,11 +131,29 @@ type Class struct {
 }
 
 func (c *Class) Arity() int {
-	return 0
+	// Either the constructor function doesn't exist
+	// which means 0 arguments obviously
+	initializer := c.FindMethod("init")
+	if initializer == nil {
+		return 0
+	}
+
+	// Or we return the number of arguments of the constructor function
+	return initializer.Arity()
 }
 
 func (c *Class) Call(interpreter *Interpreter, arguments []any) (any, error) {
-	return nil, nil
+	// When the class's constructor is called, an instance is created
+	instance := CreateInstance(c)
+	initializer := c.FindMethod("init")
+
+	// If the initializer function/constructor exists, we call it
+	// Via the current instance being bound with the constructor arguments
+	if initializer != nil {
+		initializer.Bind(instance).Call(interpreter, arguments)
+	}
+
+	return instance, nil
 }
 
 func (c *Class) String() string {
@@ -159,7 +200,10 @@ func (i *Instance) Get(name s.Token) (any, error) {
 	// Or if it's a member method, we return that instead
 	method := i.class.FindMethod(name.Lexeme)
 	if method != nil {
-		return method, nil
+		// We not just return the method
+		// But also bind the 'this' keyword for that method
+		// So that, each method is exclusive for their own objects/instances
+		return method.Bind(i), nil
 	}
 
 	// Else, there exists no such name

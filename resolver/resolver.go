@@ -15,8 +15,17 @@ const (
 	None FunctionType = iota
 	// Setting this if inside a function block
 	Function
+	// Setting this if inside a constructor function
+	Initializer
 	// Setting this if inside a class method
 	Method
+)
+
+type ClassType = int
+
+const (
+	CNone ClassType = iota
+	Class
 )
 
 // ------------------------------ RESOLVER STRUCT ----------------------------------------------------------
@@ -25,6 +34,7 @@ type Resolver struct {
 	Interpreter     *p.Interpreter
 	Scopes          []map[string]bool
 	CurrentFunction FunctionType
+	CurrentClass    ClassType
 }
 
 // ----------------------------- PRIMARY FUNCTIONS ---------------------------------------------------------
@@ -34,6 +44,7 @@ func InitResolver(interpreter *p.Interpreter) *Resolver {
 		Interpreter:     interpreter,
 		Scopes:          make([]map[string]bool, 0),
 		CurrentFunction: None,
+		CurrentClass:    CNone,
 	}
 }
 
@@ -48,16 +59,40 @@ func (r *Resolver) ResolveStatements(statements []p.Statement) {
 func (r *Resolver) resolveStatement(statement p.Statement) {
 	switch st := statement.(type) {
 	case *p.ClassSt:
+		// Since by default, the resolver assumes there is no class to begin with
+		// We assign the class type to be a Class
+		enclosingClass := r.CurrentClass
+		r.CurrentClass = Class
+
 		// A class behaves the same as function
 		// A block exists within, hence we declare and define
 		r.declare(st.Name)
 		r.define(st.Name)
 
+		// A scope is created for the class's body
+		// And the 'this' keyword is mentioned as declared and defined
+		// So that when instances are created, the scope would be perfectly aligned
+		r.beginScope()
+		scopesLen := len(r.Scopes)
+		scopeTop := r.Scopes[scopesLen-1]
+		scopeTop["this"] = true
+
 		// Every class has it's own member methods for their instances
 		// We resolve each of their methods
 		for _, method := range st.Methods {
-			r.resolveFunction(method, Method)
+			declaration := Method
+			if method.Name.Lexeme == "init" {
+				declaration = Initializer
+			}
+
+			r.resolveFunction(method, declaration)
 		}
+
+		// Finally the scope is destroyed
+		r.endScope()
+
+		// And the default class is reverted
+		r.CurrentClass = enclosingClass
 
 	case *p.BlockSt:
 		// For a block statement, we create a new scope
@@ -120,6 +155,12 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 
 		// If the return statement has a value
 		if st.Value != nil {
+			// And the function being an initializer
+			// Then a return function isn't possible
+			if r.CurrentFunction == Initializer {
+				lib.Report(st.Keyword.LineNumber, " at '"+st.Keyword.Lexeme+"'", "Can't return a value from an intializer")
+			}
+
 			// We resolve the returned value
 			r.resolveExpression(st.Value)
 		}
@@ -149,6 +190,19 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 
 		// If not, we resolve the variable through finding the scope depth
 		// Scope depth is discussed inside this function
+		r.resolveLocal(expr, token)
+
+	case *p.This:
+		// The this keyword must be used only inside a class based setting
+		token := expr.Keyword
+		if r.CurrentClass == CNone {
+			// Hence we early return if that is not the case
+			lib.Report(token.LineNumber, " at '"+token.Lexeme+"'", "Can't use 'this' outside of a class")
+			return
+		}
+
+		// The this keyword would act just like a variable,
+		// as it's mentioning the current instance of that class
 		r.resolveLocal(expr, token)
 
 	case *p.Call:

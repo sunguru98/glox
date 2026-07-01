@@ -63,7 +63,7 @@ func (i *Interpreter) execute(st Statement) error {
 		// The function declaration statement is bunched as a function
 		// And the current environment is attached with this function
 		// So that closure patterns work as higher order functions
-		function := CreateFunction(statement, i.Env)
+		function := CreateFunction(statement, i.Env, false)
 		// And mapped with the interpreter with function name - node
 		i.Env.Define(statement.Name.Lexeme, function)
 
@@ -165,7 +165,14 @@ func (i *Interpreter) execute(st Statement) error {
 		// Are defined, and stashed inside the class
 		methods := make(map[string]*Function)
 		for _, method := range statement.Methods {
-			function := CreateFunction(method, i.Env)
+			// We segregate a normal function with a method
+			// Through the initializer function's presence
+			var isInitializer bool
+			if method.Name.Lexeme == "init" {
+				isInitializer = true
+			}
+
+			function := CreateFunction(method, i.Env, isInitializer)
 			methods[method.Name.Lexeme] = function
 		}
 
@@ -188,6 +195,7 @@ func (i *Interpreter) execute(st Statement) error {
 // 7. Logical (|| and &&)
 // 8. Function call expression
 // 9. Get expression
+// 10. This expression
 
 func (i *Interpreter) evaluate(expression Expression) (any, error) {
 	switch expr := expression.(type) {
@@ -364,6 +372,17 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		}
 
 		return nil, fmt.Errorf("Only instances have fields")
+
+	case *This:
+		// Try getting the scope distance of the variable expression
+		distance, ok := i.Locals[expr]
+		// If there exists an entry on the locals map
+		// Fetch from the respective scope
+		if ok {
+			return i.Env.GetAt(distance, expr.Keyword.Lexeme), nil
+		}
+		// Else fetch from the global scope
+		return i.Globals.Get(expr.Keyword)
 
 	case *Binary:
 		// In unary we had just the right (since one)
