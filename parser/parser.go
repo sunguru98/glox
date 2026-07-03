@@ -170,6 +170,20 @@ func (p *Parser) parseClassDeclaration() (Statement, error) {
 		return nil, err
 	}
 
+	// A class can inherit from a base class
+	var superClass *Variable
+	// Hence we check if there is a '<' symbol followed by the class name
+	if p.matchTokenAndAdvance(s.Less) {
+		// Consuming the base class name
+		_, err = p.consume(s.Identifier, "Expect superclass name")
+		if err != nil {
+			return nil, err
+		}
+
+		previousPeekedToken := p.peekPrevious()
+		superClass = CreateVariableExpression(previousPeekedToken)
+	}
+
 	// Creating the methods array to stash all possible variations
 	methods := make([]*FunctionSt, 0)
 	for {
@@ -194,7 +208,7 @@ func (p *Parser) parseClassDeclaration() (Statement, error) {
 		return nil, err
 	}
 
-	return CreateClassSt(identifierToken, methods), nil
+	return CreateClassSt(identifierToken, methods, superClass), nil
 }
 
 func (p *Parser) parseVariableDeclaration() (Statement, error) {

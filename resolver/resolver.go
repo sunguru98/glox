@@ -69,6 +69,20 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		r.declare(st.Name)
 		r.define(st.Name)
 
+		stLexeme := st.Name.Lexeme
+		superClassLexeme := st.SuperClass.Name.Lexeme
+		// The base and derived classes should be different
+		if st.SuperClass != nil && stLexeme == superClassLexeme {
+			superClass := st.SuperClass.Name
+			lib.Report(superClass.LineNumber, " at '"+superClass.Lexeme+"'", "A class cannot inherit from itself")
+		}
+
+		// We check if the derives from a base class.
+		// If yes, we resolve it too
+		if st.SuperClass != nil {
+			r.resolveExpression(st.SuperClass)
+		}
+
 		// A scope is created for the class's body
 		// And the 'this' keyword is mentioned as declared and defined
 		// So that when instances are created, the scope would be perfectly aligned

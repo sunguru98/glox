@@ -177,21 +177,23 @@ func CreateReturnSt(keyword s.Token, value Expression) *ReturnSt {
 // -------------------------------------------------------------------------------------------------------------------------
 
 // A class statement is of grammar
-// 'class' IDENTIFIER '{' function* '}'
+// 'class' IDENTIFIER ('<' IDENTIFIER)? '{ (function)* }'
 // The function* here is simply stating, there can be more than one method
 // Based on FunctionSt grammar above
 
 type ClassSt struct {
-	Name    s.Token
-	Methods []*FunctionSt
+	Name       s.Token
+	Methods    []*FunctionSt
+	SuperClass *Variable
 }
 
 func (*ClassSt) stmnt() {}
 
-func CreateClassSt(name s.Token, methods []*FunctionSt) *ClassSt {
+func CreateClassSt(name s.Token, methods []*FunctionSt, superClass *Variable) *ClassSt {
 	return &ClassSt{
-		Name:    name,
-		Methods: methods,
+		Name:       name,
+		Methods:    methods,
+		SuperClass: superClass,
 	}
 }
 

@@ -158,6 +158,23 @@ func (i *Interpreter) execute(st Statement) error {
 		}
 
 	case *ClassSt:
+		// Assuming we don't derive from a base class
+		var superClass any = nil
+		// If we do derive, we evaluate the superClass
+		if statement.SuperClass != nil {
+			sC, err := i.evaluate(statement.SuperClass)
+			if err != nil {
+				return err
+			}
+
+			// And check if the superClass is actually a class type
+			superClass = sC
+			_, ok := superClass.(*Class)
+			if !ok {
+				return fmt.Errorf("%s Superclass must be a class", statement.SuperClass.Name)
+			}
+		}
+
 		// The environment stashes the class name
 		i.Env.Define(statement.Name.Lexeme, nil)
 
@@ -177,7 +194,7 @@ func (i *Interpreter) execute(st Statement) error {
 		}
 
 		// We create a class with the name and it's associated methods
-		class := CreateClass(statement.Name.Lexeme, methods)
+		class := CreateClass(statement.Name.Lexeme, methods, superClass.(*Class))
 		// And then assigns the created class with the above defined class name
 		i.Env.Assign(statement.Name, class)
 	}

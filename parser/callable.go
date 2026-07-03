@@ -126,8 +126,9 @@ func CreateFunction(declaration *FunctionSt, closureEnv *Environment, initialize
 
 // A class type in the programming language
 type Class struct {
-	Name    string
-	Methods map[string]*Function
+	Name       string
+	Methods    map[string]*Function
+	SuperClass *Class
 }
 
 func (c *Class) Arity() int {
@@ -161,13 +162,19 @@ func (c *Class) String() string {
 }
 
 func (c *Class) FindMethod(name string) *Function {
+	// A method can be in the base class as well, so we invoke that
+	if c.SuperClass != nil {
+		return c.SuperClass.FindMethod(name)
+	}
+
 	return c.Methods[name]
 }
 
-func CreateClass(name string, methods map[string]*Function) *Class {
+func CreateClass(name string, methods map[string]*Function, superClass *Class) *Class {
 	return &Class{
-		Name:    name,
-		Methods: methods,
+		Name:       name,
+		Methods:    methods,
+		SuperClass: superClass,
 	}
 }
 
