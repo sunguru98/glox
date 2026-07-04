@@ -178,6 +178,13 @@ func (i *Interpreter) execute(st Statement) error {
 		// The environment stashes the class name
 		i.Env.Define(statement.Name.Lexeme, nil)
 
+		// In case the class is inherited, we define the 'super' keyword
+		// In a new environment
+		if statement.SuperClass != nil {
+			i.Env = InitEnvironment(i.Env)
+			i.Env.Define("super", superClass)
+		}
+
 		// The methods parsed inside the class
 		// Are defined, and stashed inside the class
 		methods := make(map[string]*Function)
@@ -195,6 +202,10 @@ func (i *Interpreter) execute(st Statement) error {
 
 		// We create a class with the name and it's associated methods
 		class := CreateClass(statement.Name.Lexeme, methods, superClass.(*Class))
+		// And revert the environment back to the derived class (if inherited)
+		if statement.SuperClass != nil {
+			i.Env = i.Env.Enclosing
+		}
 		// And then assigns the created class with the above defined class name
 		i.Env.Assign(statement.Name, class)
 	}
@@ -213,6 +224,7 @@ func (i *Interpreter) execute(st Statement) error {
 // 8. Function call expression
 // 9. Get expression
 // 10. This expression
+// 11. Super expression
 
 func (i *Interpreter) evaluate(expression Expression) (any, error) {
 	switch expr := expression.(type) {
@@ -389,6 +401,19 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		}
 
 		return nil, fmt.Errorf("Only instances have fields")
+
+	case *Super:
+		distance, ok := i.Locals[expr]
+		if ok {
+			baseClass, _ := i.Env.GetAt(distance, "super").(*Class)
+			this, _ := i.Env.GetAt(distance-1, "this").(*Instance)
+			method := baseClass.FindMethod(expr.Method.Lexeme)
+			if method == nil {
+				return nil, fmt.Errorf("%v: Undefined property %s.", expr.Method, expr.Method.Lexeme)
+			}
+
+			return method.Bind(this), nil
+		}
 
 	case *This:
 		// Try getting the scope distance of the variable expression

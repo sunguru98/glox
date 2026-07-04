@@ -230,3 +230,21 @@ func CreateThisExpression(keyword s.Token) *This {
 }
 
 //----------------------------------------------------------------------------------------------------
+
+// 11. Super keyword contains the keyword itself (for error reporting) and the associated method
+
+type Super struct {
+	Keyword s.Token
+	Method  s.Token
+}
+
+func (*Super) exp() {}
+
+func CreateSuperExpression(keyword, method s.Token) *Super {
+	return &Super{
+		Keyword: keyword,
+		Method:  method,
+	}
+}
+
+//----------------------------------------------------------------------------------------------------

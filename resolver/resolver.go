@@ -26,6 +26,7 @@ type ClassType = int
 const (
 	CNone ClassType = iota
 	Class
+	SubClass
 )
 
 // ------------------------------ RESOLVER STRUCT ----------------------------------------------------------
@@ -80,7 +81,17 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 		// We check if the derives from a base class.
 		// If yes, we resolve it too
 		if st.SuperClass != nil {
+			r.CurrentClass = SubClass
 			r.resolveExpression(st.SuperClass)
+		}
+
+		// Incase we inherit from the base class
+		// We allocate the scope for the super keyword
+		if st.SuperClass != nil {
+			r.beginScope()
+			scopesLen := len(r.Scopes)
+			scopeTop := r.Scopes[scopesLen-1]
+			scopeTop["super"] = true
 		}
 
 		// A scope is created for the class's body
@@ -104,6 +115,11 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 
 		// Finally the scope is destroyed
 		r.endScope()
+
+		// Followed by the super/base class's scope (if present)
+		if st.SuperClass != nil {
+			r.endScope()
+		}
 
 		// And the default class is reverted
 		r.CurrentClass = enclosingClass
@@ -238,6 +254,18 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 		// Hence we resolve both
 		r.resolveExpression(expr.Value)
 		r.resolveExpression(expr.Object)
+
+	case *p.Super:
+		// The super keyword cannot be used outside a class
+		// Nor in a class that has not inherited a base class
+		if r.CurrentClass == CNone {
+			lib.Report(expr.Keyword.LineNumber, " at '"+expr.Keyword.Lexeme+"'", "Can't use 'super' outside of a class")
+		} else if r.CurrentClass != SubClass {
+			lib.Report(expr.Keyword.LineNumber, " at '"+expr.Keyword.Lexeme+"'", "Can't use 'super' in a class with no superclass")
+		}
+
+		// Resolving it just like a variable
+		r.resolveLocal(expr, expr.Keyword)
 
 	case *p.Assignment:
 		// The assignment operation simply means

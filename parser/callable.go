@@ -162,12 +162,17 @@ func (c *Class) String() string {
 }
 
 func (c *Class) FindMethod(name string) *Function {
-	// A method can be in the base class as well, so we invoke that
+	// If the method exists in subclass first, we invoke that
+	if method, ok := c.Methods[name]; ok {
+		return method
+	}
+
+	// Or if the method exists in the base class, we invoke that
 	if c.SuperClass != nil {
 		return c.SuperClass.FindMethod(name)
 	}
 
-	return c.Methods[name]
+	return nil
 }
 
 func CreateClass(name string, methods map[string]*Function, superClass *Class) *Class {

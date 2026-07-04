@@ -1066,7 +1066,9 @@ func (p *Parser) parseCall() (Expression, error) {
 	return callExpression, nil
 }
 
-// Primary - Number / String / true / false / nil / grouping expression / IDENTIFIER
+// Primary - Number / String / true / false
+// / nil / grouping expression / IDENTIFIER / '('expression')'
+// / 'super'.IDENTIFIER
 func (p *Parser) parsePrimary() (Expression, error) {
 	// Check if the current index points to a
 	// 1. True token
@@ -1093,7 +1095,23 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return CreateLiteralExpression(previousPeekedToken.Literal), nil
 	}
 
-	// 5. The 'this' keyword is a literal, hence we check for the same
+	// 5. 'super' keyword
+	if p.matchTokenAndAdvance(s.Super) {
+		keyword := p.peekPrevious()
+		_, err := p.consume(s.Dot, "Expect . after super")
+		if err != nil {
+			return nil, err
+		}
+
+		method, err := p.consume(s.Identifier, "Expect superclass method name")
+		if err != nil {
+			return nil, err
+		}
+
+		return CreateSuperExpression(keyword, method), nil
+	}
+
+	// 6. The 'this' keyword is a literal, hence we check for the same
 	if p.matchTokenAndAdvance(s.This) {
 		// Whenever we match a token, the current index gets incremented
 		// Hence technically, the token we want is previous
@@ -1102,14 +1120,14 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return CreateThisExpression(previousPeekedToken), nil
 	}
 
-	// 6. An Identifier
+	// 7. An Identifier
 	if p.matchTokenAndAdvance(s.Identifier) {
 		// Every identifier comes with a variable statement
 		previousPeekedToken := p.peekPrevious()
 		return CreateVariableExpression(previousPeekedToken), nil
 	}
 
-	// 7. A grouping expression "(expression)"
+	// 8. A grouping expression "(expression)"
 	// starts with left parentheses
 	if p.matchTokenAndAdvance(s.LeftParen) {
 		// Call the lowest matching expression
