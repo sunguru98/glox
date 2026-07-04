@@ -44,7 +44,7 @@ func (i *Interpreter) Resolve(expression Expression, depth int) {
 }
 
 // Execute handles all sorts of
-// 1. Statements (Print, Expression, If, Block)
+// 1. Statements (Print, Expression, If, Block, Function, While, Return, Class)
 // 2. Variables
 
 func (i *Interpreter) execute(st Statement) error {
@@ -63,7 +63,7 @@ func (i *Interpreter) execute(st Statement) error {
 		// The function declaration statement is bunched as a function
 		// And the current environment is attached with this function
 		// So that closure patterns work as higher order functions
-		function := CreateFunction(statement, i.Env)
+		function := CreateFunction(statement, i.Env, false)
 		// And mapped with the interpreter with function name - node
 		i.Env.Define(statement.Name.Lexeme, function)
 
@@ -152,9 +152,62 @@ func (i *Interpreter) execute(st Statement) error {
 			returnValue = value
 		}
 
+		// Else we return a custom error as the return value
 		return &ReturnValue{
 			Value: returnValue,
 		}
+
+	case *ClassSt:
+		// Assuming we don't derive from a base class
+		var superClass any = nil
+		// If we do derive, we evaluate the superClass
+		if statement.SuperClass != nil {
+			sC, err := i.evaluate(statement.SuperClass)
+			if err != nil {
+				return err
+			}
+
+			// And check if the superClass is actually a class type
+			superClass = sC
+			_, ok := superClass.(*Class)
+			if !ok {
+				return fmt.Errorf("%s Superclass must be a class", statement.SuperClass.Name)
+			}
+		}
+
+		// The environment stashes the class name
+		i.Env.Define(statement.Name.Lexeme, nil)
+
+		// In case the class is inherited, we define the 'super' keyword
+		// In a new environment
+		if statement.SuperClass != nil {
+			i.Env = InitEnvironment(i.Env)
+			i.Env.Define("super", superClass)
+		}
+
+		// The methods parsed inside the class
+		// Are defined, and stashed inside the class
+		methods := make(map[string]*Function)
+		for _, method := range statement.Methods {
+			// We segregate a normal function with a method
+			// Through the initializer function's presence
+			var isInitializer bool
+			if method.Name.Lexeme == "init" {
+				isInitializer = true
+			}
+
+			function := CreateFunction(method, i.Env, isInitializer)
+			methods[method.Name.Lexeme] = function
+		}
+
+		// We create a class with the name and it's associated methods
+		class := CreateClass(statement.Name.Lexeme, methods, superClass.(*Class))
+		// And revert the environment back to the derived class (if inherited)
+		if statement.SuperClass != nil {
+			i.Env = i.Env.Enclosing
+		}
+		// And then assigns the created class with the above defined class name
+		i.Env.Assign(statement.Name, class)
 	}
 
 	return nil
@@ -169,58 +222,61 @@ func (i *Interpreter) execute(st Statement) error {
 // 6. Assignment
 // 7. Logical (|| and &&)
 // 8. Function call expression
+// 9. Get expression
+// 10. This expression
+// 11. Super expression
 
 func (i *Interpreter) evaluate(expression Expression) (any, error) {
-	switch exp := expression.(type) {
+	switch expr := expression.(type) {
 	case *Literal:
 		// A literal has already it's value present inside
 		// Hence we can return just that.
-		return exp.Value, nil
+		return expr.Value, nil
 
 	case *Logical:
 		// Similar to Binary, we evaluate the left expression
-		left, err := i.evaluate(exp.Left)
+		left, err := i.evaluate(expr.Left)
 		if err != nil {
 			return nil, err
 		}
 
 		// For a Logical OR, if left is true, it's enough to evaluate the left
 		// Due to short circuiting
-		if exp.Operator.Type == s.Or && i.isTruthy(left) {
+		if expr.Operator.Type == s.Or && i.isTruthy(left) {
 			return left, nil
 		}
 
 		// For a logical AND, if left is false, it's enough to evaluate the left
 		// Due to short circuiting
-		if exp.Operator.Type == s.And && !i.isTruthy(left) {
+		if expr.Operator.Type == s.And && !i.isTruthy(left) {
 			return left, nil
 		}
 
 		// Else, we evaluate the right expression
-		return i.evaluate(exp.Right)
+		return i.evaluate(expr.Right)
 
 	case *Grouping:
 		// A parantheses can have multiple sub expressions inside
 		// Hence we recurse the same function over and over
 		// Till we evaluate all of it inside the paran
-		return i.evaluate(exp.Expression)
+		return i.evaluate(expr.Expression)
 
 	case *Unary:
 		// Same goes with Unary.
 		// Evaluate the expression first
-		right, err := i.evaluate(exp.Right)
+		right, err := i.evaluate(expr.Right)
 		if err != nil {
 			return nil, err
 		}
 
 		// And then evaluate the operator before it
 		// Which is either ! or -
-		switch exp.Operator.Type {
+		switch expr.Operator.Type {
 
 		case s.Bang:
 			return !i.isTruthy(right), nil
 		case s.Minus:
-			value, err := i.checkNumericOperand(exp.Operator, right)
+			value, err := i.checkNumericOperand(expr.Operator, right)
 			if err != nil {
 				return nil, err
 			}
@@ -231,32 +287,32 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 
 	case *Variable:
 		// Try getting the scope distance of the variable expression
-		distance, ok := i.Locals[exp]
+		distance, ok := i.Locals[expr]
 		// If there exists an entry on the locals map
 		// Fetch from the respective scope
 		if ok {
-			return i.Env.GetAt(distance, exp.Name.Lexeme), nil
+			return i.Env.GetAt(distance, expr.Name.Lexeme), nil
 		}
 		// Else fetch from the global scope
-		return i.Globals.Get(exp.Name)
+		return i.Globals.Get(expr.Name)
 
 	case *Assignment:
 		// We first evaluate the value expression
-		value, err := i.evaluate(exp.Value)
+		value, err := i.evaluate(expr.Value)
 		if err != nil {
 			return nil, err
 		}
 
 		// Try getting the scope distance of the variable expression
-		distance, ok := i.Locals[exp]
+		distance, ok := i.Locals[expr]
 		// If there exists an entry on the locals map
 		// (Re)Assign to that respective scope
 		if ok {
-			i.Env.AssignAt(distance, exp.Name, value)
+			i.Env.AssignAt(distance, expr.Name, value)
 		} else {
 			// Else, we (re)assign the above evaluated value
 			// With the variable name in global scope
-			err = i.Globals.Assign(exp.Name, value)
+			err = i.Globals.Assign(expr.Name, value)
 			if err != nil {
 				return nil, err
 			}
@@ -269,14 +325,14 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// FunctionName()
 		// The interpreter wouldn't know what to do with that function
 		// Hence we evaluate the FunctionSt Node to generate a function mapping with interpreter
-		callee, err := i.evaluate(exp.Callee)
+		callee, err := i.evaluate(expr.Callee)
 		if err != nil {
 			return nil, err
 		}
 
 		// The arguments of each Call Statement is evaluated
 		arguments := make([]any, 0)
-		for _, argument := range exp.Arguments {
+		for _, argument := range expr.Arguments {
 			evaluatedArg, err := i.evaluate(argument)
 			if err != nil {
 				return nil, err
@@ -290,13 +346,13 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// if it's of type Callable \
 		function, ok := callee.(Callable)
 		if !ok {
-			return nil, fmt.Errorf("%s: Can only call functions and classes", exp.Paren)
+			return nil, fmt.Errorf("%s: Can only call functions and classes", expr.Paren)
 		}
 
 		// And the arguments received in the call statement
 		// Is checked against the function declaration parameters size
 		if argumentsLen != function.Arity() {
-			return nil, fmt.Errorf("%s: Expected %d arguments, but got %d.", exp.Paren, function.Arity(), argumentsLen)
+			return nil, fmt.Errorf("%s: Expected %d arguments, but got %d.", expr.Paren, function.Arity(), argumentsLen)
 		}
 
 		// The corresponding function is then called
@@ -308,20 +364,82 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 		// And fetches the result
 		return callResult, nil
 
+	case *Get:
+		// The object is evaluated to classify as an instance
+		object, err := i.evaluate(expr.Object)
+		if err != nil {
+			return nil, err
+		}
+
+		// And then checked if it evaluated and brought back as an instance type
+		instance, ok := object.(*Instance)
+		if ok {
+			// Followed by fetching the value of the same
+			return instance.Get(expr.Name)
+		}
+
+		return nil, fmt.Errorf("Only instances have properties")
+
+	case *Set:
+		// Object is evaluated to classify as an instance
+		object, err := i.evaluate(expr.Object)
+		if err != nil {
+			return nil, err
+		}
+
+		// And then checked if it evaluated and brought back as an instance type
+		instance, ok := object.(*Instance)
+		if ok {
+			// If it's an instance, we evaluate the value it's being assigned towards
+			value, err := i.evaluate(expr.Value)
+			if err != nil {
+				return nil, err
+			}
+
+			// And set accordingly.
+			instance.Set(expr.Name, value)
+		}
+
+		return nil, fmt.Errorf("Only instances have fields")
+
+	case *Super:
+		distance, ok := i.Locals[expr]
+		if ok {
+			baseClass, _ := i.Env.GetAt(distance, "super").(*Class)
+			this, _ := i.Env.GetAt(distance-1, "this").(*Instance)
+			method := baseClass.FindMethod(expr.Method.Lexeme)
+			if method == nil {
+				return nil, fmt.Errorf("%v: Undefined property %s.", expr.Method, expr.Method.Lexeme)
+			}
+
+			return method.Bind(this), nil
+		}
+
+	case *This:
+		// Try getting the scope distance of the variable expression
+		distance, ok := i.Locals[expr]
+		// If there exists an entry on the locals map
+		// Fetch from the respective scope
+		if ok {
+			return i.Env.GetAt(distance, expr.Keyword.Lexeme), nil
+		}
+		// Else fetch from the global scope
+		return i.Globals.Get(expr.Keyword)
+
 	case *Binary:
 		// In unary we had just the right (since one)
 		// Here we just repeat the same twice (two operands)
-		left, err := i.evaluate(exp.Left)
+		left, err := i.evaluate(expr.Left)
 		if err != nil {
 			return nil, err
 		}
 
-		right, err := i.evaluate(exp.Right)
+		right, err := i.evaluate(expr.Right)
 		if err != nil {
 			return nil, err
 		}
 
-		switch exp.Operator.Type {
+		switch expr.Operator.Type {
 		// The plus symbol can be used for both
 		case s.Plus:
 
@@ -340,14 +458,14 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			}
 
 			// 3. Throw error otherwise
-			return nil, fmt.Errorf("Operands must be numbers or two strings\n[line %d]", exp.Operator.LineNumber)
+			return nil, fmt.Errorf("Operands must be numbers or two strings\n[line %d]", expr.Operator.LineNumber)
 
 		// Every other math related operation
 		// (-, *, /, <, <=, >, >=)
 		// Has to check the if the operands are numbers
 		// And then perform the evaluation accordingly
 		case s.Minus:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -355,7 +473,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v - v1, nil
 
 		case s.Slash:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -363,7 +481,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v / v1, nil
 
 		case s.Star:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -371,7 +489,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v * v1, nil
 
 		case s.Greater:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -379,7 +497,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v > v1, nil
 
 		case s.GreaterEqual:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -387,7 +505,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v >= v1, nil
 
 		case s.Less:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}
@@ -395,7 +513,7 @@ func (i *Interpreter) evaluate(expression Expression) (any, error) {
 			return v < v1, nil
 
 		case s.LessEqual:
-			v, v1, err := i.checkNumericOperands(exp.Operator, left, right)
+			v, v1, err := i.checkNumericOperands(expr.Operator, left, right)
 			if err != nil {
 				return nil, err
 			}

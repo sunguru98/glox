@@ -162,6 +162,55 @@ func (p *Parser) synchronizeFromError() {
 
 // ------------------------ DECLARATION -----------------------------
 
+func (p *Parser) parseClassDeclaration() (Statement, error) {
+	// Current index points after the class keyword
+	// Hence we parse the class name/IDENTIFIER
+	identifierToken, err := p.consume(s.Identifier, "Expect class name.")
+	if err != nil {
+		return nil, err
+	}
+
+	// A class can inherit from a base class
+	var superClass *Variable
+	// Hence we check if there is a '<' symbol followed by the class name
+	if p.matchTokenAndAdvance(s.Less) {
+		// Consuming the base class name
+		_, err = p.consume(s.Identifier, "Expect superclass name")
+		if err != nil {
+			return nil, err
+		}
+
+		previousPeekedToken := p.peekPrevious()
+		superClass = CreateVariableExpression(previousPeekedToken)
+	}
+
+	// Creating the methods array to stash all possible variations
+	methods := make([]*FunctionSt, 0)
+	for {
+		// The loop runs till we meet the end of the file token
+		// Or a Right brace token is hit
+		if p.checkTokenType(s.RightBrace) || p.isCurrentEOF() {
+			break
+		}
+
+		methodStatement, err := p.parseFunctionDeclaration("method")
+		if err != nil {
+			return nil, err
+		}
+
+		methods = append(methods, methodStatement.(*FunctionSt))
+	}
+
+	// The loop might have been terminated due to EOF, hence we check
+	// By trying to consume the Right brace token
+	_, err = p.consume(s.RightBrace, "Expect '}' after class body")
+	if err != nil {
+		return nil, err
+	}
+
+	return CreateClassSt(identifierToken, methods, superClass), nil
+}
+
 func (p *Parser) parseVariableDeclaration() (Statement, error) {
 	// Current index points after the var keyword
 	// Hence we parse the variable name/IDENTIFIER
@@ -260,6 +309,17 @@ func (p *Parser) parseFunctionDeclaration(kind string) (Statement, error) {
 }
 
 func (p *Parser) parseDeclaration() Statement {
+	// If checking for a 'class' keyword exists
+	if p.matchTokenAndAdvance(s.Class) {
+		classStatement, err := p.parseClassDeclaration()
+		if err != nil {
+			p.synchronizeFromError()
+			return nil
+		}
+
+		return classStatement
+	}
+
 	// If checking for a 'fun' keyword exists
 	if p.matchTokenAndAdvance(s.Fun) {
 		functionStatement, err := p.parseFunctionDeclaration("function")
@@ -657,15 +717,22 @@ func (p *Parser) parseAssignment() (Expression, error) {
 		// Check if the assignment expression is of type Variable
 		// That is, a variable that is already declared/initialized with a value
 		variableExpression, ok := assignmentExpression.(*Variable)
-		if !ok {
-			// If not, then the value cannot be assigned
-			return nil, p.error(equalToken, "Invalid assignment target.")
+		if ok {
+			// Fetch the variable name and return as an assignment expression
+			// With the new value
+			variableName := variableExpression.Name
+			return CreateAssignmentExpression(variableName, valueExpression), nil
 		}
 
-		// Else, fetch the variable name and return as an assignment expression
-		// With the new value
-		variableName := variableExpression.Name
-		assignmentExpression = CreateAssignmentExpression(variableName, valueExpression)
+		// Or if the assignment expression is a member field get expression
+		// It means the value is being assigned to the member field (through the dot operator)
+		getExpr, ok := assignmentExpression.(*Get)
+		if ok {
+			return CreateSetExpression(getExpr.Object, getExpr.Name, valueExpression), nil
+		}
+
+		// If not, then the value cannot be assigned
+		return nil, p.error(equalToken, "Invalid assignment target.")
 	}
 
 	return assignmentExpression, nil
@@ -939,6 +1006,21 @@ func (p *Parser) parseCall() (Expression, error) {
 			break
 		}
 
+		// If there exists a dot operator
+		// We consider that as a get expression
+		// A get expression is simply the access of member fields/methods of a class instance
+		if p.matchTokenAndAdvance(s.Dot) {
+			// We consume the name of the member field/method
+			member, err := p.consume(s.Identifier, "Expect property name after .")
+			if err != nil {
+				return nil, err
+			}
+
+			// Followed by constructing a Get expression
+			callExpression = CreateGetExpression(callExpression, member)
+			continue
+		}
+
 		// For each pair of parentheses, we create an argument expression list
 		arguments := make([]Expression, 0)
 
@@ -984,7 +1066,9 @@ func (p *Parser) parseCall() (Expression, error) {
 	return callExpression, nil
 }
 
-// Primary - Number / String / true / false / nil / grouping expression / IDENTIFIER
+// Primary - Number / String / true / false
+// / nil / grouping expression / IDENTIFIER / '('expression')'
+// / 'super'.IDENTIFIER
 func (p *Parser) parsePrimary() (Expression, error) {
 	// Check if the current index points to a
 	// 1. True token
@@ -1011,14 +1095,39 @@ func (p *Parser) parsePrimary() (Expression, error) {
 		return CreateLiteralExpression(previousPeekedToken.Literal), nil
 	}
 
-	// 5. An Identifier
+	// 5. 'super' keyword
+	if p.matchTokenAndAdvance(s.Super) {
+		keyword := p.peekPrevious()
+		_, err := p.consume(s.Dot, "Expect . after super")
+		if err != nil {
+			return nil, err
+		}
+
+		method, err := p.consume(s.Identifier, "Expect superclass method name")
+		if err != nil {
+			return nil, err
+		}
+
+		return CreateSuperExpression(keyword, method), nil
+	}
+
+	// 6. The 'this' keyword is a literal, hence we check for the same
+	if p.matchTokenAndAdvance(s.This) {
+		// Whenever we match a token, the current index gets incremented
+		// Hence technically, the token we want is previous
+		// (oldCurrent = newCurrent - 1)
+		previousPeekedToken := p.peekPrevious()
+		return CreateThisExpression(previousPeekedToken), nil
+	}
+
+	// 7. An Identifier
 	if p.matchTokenAndAdvance(s.Identifier) {
 		// Every identifier comes with a variable statement
 		previousPeekedToken := p.peekPrevious()
 		return CreateVariableExpression(previousPeekedToken), nil
 	}
 
-	// 6. A grouping expression "(expression)"
+	// 8. A grouping expression "(expression)"
 	// starts with left parentheses
 	if p.matchTokenAndAdvance(s.LeftParen) {
 		// Call the lowest matching expression

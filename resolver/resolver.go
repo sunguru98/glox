@@ -15,6 +15,18 @@ const (
 	None FunctionType = iota
 	// Setting this if inside a function block
 	Function
+	// Setting this if inside a constructor function
+	Initializer
+	// Setting this if inside a class method
+	Method
+)
+
+type ClassType = int
+
+const (
+	CNone ClassType = iota
+	Class
+	SubClass
 )
 
 // ------------------------------ RESOLVER STRUCT ----------------------------------------------------------
@@ -23,6 +35,7 @@ type Resolver struct {
 	Interpreter     *p.Interpreter
 	Scopes          []map[string]bool
 	CurrentFunction FunctionType
+	CurrentClass    ClassType
 }
 
 // ----------------------------- PRIMARY FUNCTIONS ---------------------------------------------------------
@@ -32,6 +45,7 @@ func InitResolver(interpreter *p.Interpreter) *Resolver {
 		Interpreter:     interpreter,
 		Scopes:          make([]map[string]bool, 0),
 		CurrentFunction: None,
+		CurrentClass:    CNone,
 	}
 }
 
@@ -45,6 +59,71 @@ func (r *Resolver) ResolveStatements(statements []p.Statement) {
 
 func (r *Resolver) resolveStatement(statement p.Statement) {
 	switch st := statement.(type) {
+	case *p.ClassSt:
+		// Since by default, the resolver assumes there is no class to begin with
+		// We assign the class type to be a Class
+		enclosingClass := r.CurrentClass
+		r.CurrentClass = Class
+
+		// A class behaves the same as function
+		// A block exists within, hence we declare and define
+		r.declare(st.Name)
+		r.define(st.Name)
+
+		stLexeme := st.Name.Lexeme
+		superClassLexeme := st.SuperClass.Name.Lexeme
+		// The base and derived classes should be different
+		if st.SuperClass != nil && stLexeme == superClassLexeme {
+			superClass := st.SuperClass.Name
+			lib.Report(superClass.LineNumber, " at '"+superClass.Lexeme+"'", "A class cannot inherit from itself")
+		}
+
+		// We check if the derives from a base class.
+		// If yes, we resolve it too
+		if st.SuperClass != nil {
+			r.CurrentClass = SubClass
+			r.resolveExpression(st.SuperClass)
+		}
+
+		// Incase we inherit from the base class
+		// We allocate the scope for the super keyword
+		if st.SuperClass != nil {
+			r.beginScope()
+			scopesLen := len(r.Scopes)
+			scopeTop := r.Scopes[scopesLen-1]
+			scopeTop["super"] = true
+		}
+
+		// A scope is created for the class's body
+		// And the 'this' keyword is mentioned as declared and defined
+		// So that when instances are created, the scope would be perfectly aligned
+		r.beginScope()
+		scopesLen := len(r.Scopes)
+		scopeTop := r.Scopes[scopesLen-1]
+		scopeTop["this"] = true
+
+		// Every class has it's own member methods for their instances
+		// We resolve each of their methods
+		for _, method := range st.Methods {
+			declaration := Method
+			if method.Name.Lexeme == "init" {
+				declaration = Initializer
+			}
+
+			r.resolveFunction(method, declaration)
+		}
+
+		// Finally the scope is destroyed
+		r.endScope()
+
+		// Followed by the super/base class's scope (if present)
+		if st.SuperClass != nil {
+			r.endScope()
+		}
+
+		// And the default class is reverted
+		r.CurrentClass = enclosingClass
+
 	case *p.BlockSt:
 		// For a block statement, we create a new scope
 		r.beginScope()
@@ -106,6 +185,12 @@ func (r *Resolver) resolveStatement(statement p.Statement) {
 
 		// If the return statement has a value
 		if st.Value != nil {
+			// And the function being an initializer
+			// Then a return function isn't possible
+			if r.CurrentFunction == Initializer {
+				lib.Report(st.Keyword.LineNumber, " at '"+st.Keyword.Lexeme+"'", "Can't return a value from an intializer")
+			}
+
 			// We resolve the returned value
 			r.resolveExpression(st.Value)
 		}
@@ -137,6 +222,19 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 		// Scope depth is discussed inside this function
 		r.resolveLocal(expr, token)
 
+	case *p.This:
+		// The this keyword must be used only inside a class based setting
+		token := expr.Keyword
+		if r.CurrentClass == CNone {
+			// Hence we early return if that is not the case
+			lib.Report(token.LineNumber, " at '"+token.Lexeme+"'", "Can't use 'this' outside of a class")
+			return
+		}
+
+		// The this keyword would act just like a variable,
+		// as it's mentioning the current instance of that class
+		r.resolveLocal(expr, token)
+
 	case *p.Call:
 		// Function calls are basically similar to declaration
 		// Instead of defining/declaring the function, we just resolve it
@@ -145,6 +243,29 @@ func (r *Resolver) resolveExpression(expression p.Expression) {
 		for _, argument := range expr.Arguments {
 			r.resolveExpression(argument)
 		}
+
+	case *p.Get:
+		// A get expression could be a member field/method
+		// Hence we resolve the underlying expression (the field/method)
+		r.resolveExpression(expr.Object)
+
+	case *p.Set:
+		// A set expression sets the value w.r.t the object (instance)
+		// Hence we resolve both
+		r.resolveExpression(expr.Value)
+		r.resolveExpression(expr.Object)
+
+	case *p.Super:
+		// The super keyword cannot be used outside a class
+		// Nor in a class that has not inherited a base class
+		if r.CurrentClass == CNone {
+			lib.Report(expr.Keyword.LineNumber, " at '"+expr.Keyword.Lexeme+"'", "Can't use 'super' outside of a class")
+		} else if r.CurrentClass != SubClass {
+			lib.Report(expr.Keyword.LineNumber, " at '"+expr.Keyword.Lexeme+"'", "Can't use 'super' in a class with no superclass")
+		}
+
+		// Resolving it just like a variable
+		r.resolveLocal(expr, expr.Keyword)
 
 	case *p.Assignment:
 		// The assignment operation simply means
